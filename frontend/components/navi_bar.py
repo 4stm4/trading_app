@@ -4,14 +4,14 @@ from dash import html
 from trading_app.frontend import labels
 from trading_app.settings import language
 
-LOGO = 'assets/images/crypto_manager_middle.png'
-HOME_PAGE = 'http://crypto-manager.online'
+LOGO = "assets/images/crypto_manager_middle.png"
+HOME_PAGE = "http://crypto-manager.online"
 
 navi_bar = dbc.Navbar(
-    class_name='header-container',
+    class_name="header-container",
     children=[
         html.Div(
-            className='header-leftside',
+            className="header-leftside",
             children=[
                 html.A(
                     dbc.Row(
@@ -24,66 +24,64 @@ navi_bar = dbc.Navbar(
                     href=HOME_PAGE,
                     style={"textDecoration": "none"},
                 ),
-            ]
+            ],
         ),
         html.Div(
-            className='header-censterside',
+            className="header-censterside",
             children=[],
         ),
         html.Div(
-            className='header-rightside',
+            className="header-rightside",
             children=[
                 html.Div(
-                    className='bar-container',
+                    className="bar-container",
                     children=[
                         html.A(
-                            'Войти',
-                            className='button-login',
-                            href='signup',
+                            "Войти",
+                            className="button-login",
+                            href="signup",
                         ),
                     ],
                 ),
                 html.Div(
-                    className='bar-container',
+                    className="bar-container",
                     children=[
                         dbc.Button(
-                            children =[labels.navi_bar[language]['Registration']],
-                            className='button-registration',
-                            href='register',
+                            children=[labels.navi_bar[language]["Registration"]],
+                            className="button-registration",
+                            href="register",
                         ),
                     ],
                 ),
                 html.Div(
-                    className='bar-container',
-                    children=[
-                        html.I(className='fa-solid fa-globe icon-language')
-                    ],
+                    className="bar-container",
+                    children=[html.I(className="fa-solid fa-globe icon-language")],
                 ),
                 html.Div(
-                    className='bar-container',
+                    className="bar-container",
                     children=[
                         dbc.Button(
-                            class_name='themes-switch',
+                            class_name="themes-switch",
                             title="Switch to light theme",
                             children=[
                                 html.Span(
-                                    className='check',
+                                    className="check",
                                     children=[
                                         html.Span(
-                                            className='icon',
+                                            className="icon",
                                             children=[
-                                                html.I(className='fa-regular fa-sun sun'),
-                                                html.I(className='fa-regular fa-moon moon')],
+                                                html.I(className="fa-regular fa-sun sun"),
+                                                html.I(className="fa-regular fa-moon moon"),
+                                            ],
                                         ),
                                     ],
-
                                 )
                             ],
                         )
                     ],
                 ),
-            ]
-        )
+            ],
+        ),
     ],
     color="dark",
     dark=True,

@@ -1,11 +1,12 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-language = 'ru'
+language = "ru"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file="dev.env", env_file_encoding="utf-8", extra="ignore")
-    LOG_LEVEL: str = 'DEBUG'
+    LOG_LEVEL: str = "DEBUG"
     APP_DB_USER: str
     APP_DB_PASS: str
     APP_DB_HOST: str

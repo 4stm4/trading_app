@@ -42,13 +42,13 @@ class MarketBoard(BaseModel):
 class AssetInfo(BaseModel):
     id: int = Field(alias="IdObject")
     ticker: str = Field(alias="Ticker")
-    isin: str = Field(alias="ISIN")  # ← исправлено с iS_in на isin
+    isin: str = Field(alias="ISIN")
     name: str = Field(alias="Name")
     description: str = Field(alias="Description")
     nominal: float = Field(alias="Nominal")
     type_id: int = Field(alias="IdObjectType")
     group_id: int = Field(alias="IdObjectGroup")
-    base_id: Optional[int] = Field(alias="IdObjectBase", default=None)  # ← тип int, а не str
+    base_id: Optional[int] = Field(alias="IdObjectBase", default=None)
     face_unit_id: int = Field(alias="IdObjectFaceUnit")
     mat_date: Optional[date] = Field(alias="MatDateObject", default=None)
     instruments: List[Instrument] = Field(alias="Instruments")

@@ -1,0 +1,18 @@
+# Core runtime dependencies
+binance-connector
+dash
+dash-bootstrap-components
+Flask
+Flask-Login
+Flask-SQLAlchemy
+pandas
+pydantic
+pydantic-settings
+requests
+websockets
+
+# Database driver for the mssql+pymssql URL in settings.APP_DB_URL
+pymssql
+
+# Tooling
+ruff

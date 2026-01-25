@@ -18,7 +18,6 @@ class KLine(BaseModel):
     quote_asset_volume: str
     ignore_field: str
 
-
     class Config:
         json_encoders = {
             datetime: lambda v: v.timestamp(),
@@ -28,17 +27,16 @@ class KLine(BaseModel):
 class KLines(BaseModel):
     lines: List[KLine]
 
-
     def to_list(self):
         klines_list = []
         for line in self.lines:
             klines_list.append(
                 {
-                    'Date': line.close_time,
-                    'Open': line.open_price,
-                    'High': line.max_price,
-                    'Low': line.min_price,
-                    'Close': line.close_price,
+                    "Date": line.close_time,
+                    "Open": line.open_price,
+                    "High": line.max_price,
+                    "Low": line.min_price,
+                    "Close": line.close_price,
                 }
             )
         return klines_list
