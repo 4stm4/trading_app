@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 from datetime import date, datetime
 
 
@@ -41,6 +41,7 @@ class FinInfoLast(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+
 class FinInfoOrderBook(BaseModel):
     id: int = Field(alias="IdFi")
     session_id: int = Field(alias="IdSession")
@@ -57,6 +58,7 @@ class FinInfoOrderBook(BaseModel):
     low_ask: float = Field(alias="LowAsk")
 
     model_config = {"populate_by_name": True}
+
 
 class OrderBookLine(BaseModel):
     price: float = Field(alias="Price")

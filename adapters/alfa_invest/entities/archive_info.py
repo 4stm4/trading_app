@@ -17,10 +17,12 @@ class ArchiveQueryPayload(BaseModel):
     take_last_n_candles: Optional[int] = Field(alias="TakeLastNCandles", default=None)
     scope: Optional[str] = Field(alias="Scope", default=None)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def check_time_params(self):
         if not self.time_frame and (self.interval is None or self.period is None):
-            raise ValueError("Either 'TimeFrame' must be provided, or both 'Interval' and 'Period'.")
+            raise ValueError(
+                "Either 'TimeFrame' must be provided, or both 'Interval' and 'Period'."
+            )
         if self.days_count is None and self.last_day is None:
             raise ValueError("Either 'DaysCount' or 'LastDay' must be specified.")
         return self
@@ -34,13 +36,13 @@ class ArchiveQueryRequest(BaseModel):
     id: str = Field(alias="Id")
     payload: ArchiveQueryPayload = Field(alias="Payload")
 
-    @field_validator('id')
+    @field_validator("id")
     @classmethod
     def validate_id_is_uuid(cls, v: str) -> str:
         uuid.UUID(v)
         return v
 
-    @field_validator('channel')
+    @field_validator("channel")
     @classmethod
     def validate_channel(cls, v: str) -> str:
         if v != "#Archive.Query":
@@ -48,7 +50,6 @@ class ArchiveQueryRequest(BaseModel):
         return v
 
     model_config = {"populate_by_name": True}
-
 
 
 class ArchiveListenRequest(BaseModel):

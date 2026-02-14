@@ -2,11 +2,11 @@ import asyncio
 import logging
 import time
 from enum import Enum
+import json
 from typing import Optional
 
-import websockets
-from websockets import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed, InvalidState
+from websockets.legacy.client import WebSocketClientProtocol, connect
 
 
 class _ConnState(Enum):
@@ -24,11 +24,13 @@ class MoexClient:
         heartbeat_interval: float = 30.0,
         reconnect_event: Optional[asyncio.Event] = None,
         logger: Optional[logging.Logger] = None,
+        message_queue: Optional[asyncio.Queue] = None,
     ) -> None:
         self._url = "ws://127.0.0.1:3366/router/"
         self._heartbeat_interval = heartbeat_interval
         self._reconnect_event = reconnect_event
         self._logger = logger or logging.getLogger(__name__)
+        self._message_queue = message_queue
 
         self._ws: Optional[WebSocketClientProtocol] = None
         self._reader_task: Optional[asyncio.Task] = None
@@ -49,7 +51,12 @@ class MoexClient:
             try:
                 self._log("connect_start", f"Connecting to {self._url}")
                 self._ws = await asyncio.wait_for(
-                    websockets.connect(self._url, ping_interval=None, close_timeout=5),
+                    connect(
+                        self._url,
+                        ping_interval=None,
+                        close_timeout=5,
+                        open_timeout=timeout,
+                    ),
                     timeout=timeout,
                 )
                 self._state = _ConnState.CONNECTED
@@ -112,7 +119,13 @@ class MoexClient:
         try:
             assert self._ws is not None
             async for message in self._ws:
-                self._log("recv", "Message received", message_preview=str(message)[:128])
+                self._log("recv", "Message received", message_preview=str(message)[:256])
+                self._log("recv_raw", "Raw message", message=str(message))
+                if self._message_queue is not None:
+                    try:
+                        self._message_queue.put_nowait(message)
+                    except asyncio.QueueFull:
+                        self._log("recv_drop", "Queue is full, dropping message")
         except asyncio.CancelledError:
             self._log("reader_cancel", "Reader cancelled")
             raise
@@ -184,3 +197,31 @@ class MoexClient:
         """Structured logging helper."""
         payload = {"event": event, **extra}
         self._logger.info(message, extra={"context": payload})
+
+    async def send_text(self, data: str) -> None:
+        """Send a text frame through the WebSocket."""
+        if not self.is_connected() or self._ws is None:
+            raise RuntimeError("WebSocket is not connected")
+        await self._ws.send(data)
+
+    async def send_routing_request(
+        self, command: str, channel: str, payload: object = None, req_id: str | None = None
+    ) -> None:
+        """Send a routing request according to router format."""
+        msg: dict[str, object] = {"Command": command, "Channel": channel}
+        if req_id is not None:
+            msg["Id"] = req_id
+        if payload is not None:
+            msg["Payload"] = json.dumps(payload) if not isinstance(payload, str) else payload
+        raw = json.dumps(msg)
+        self._log("send", "Sending routing request", raw_message=raw)
+        await self.send_text(raw)
+
+    async def next_message(self, timeout: Optional[float] = None) -> Optional[str]:
+        """Pop next message from queue (if configured)."""
+        if self._message_queue is None:
+            raise RuntimeError("message_queue not configured")
+        try:
+            return await asyncio.wait_for(self._message_queue.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
