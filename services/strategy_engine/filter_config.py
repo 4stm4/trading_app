@@ -14,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-from .models import TradingModel
+from .models import MODELS, TradingModel
 
 
 DEFAULT_FILTERS: Dict[str, Any] = {
@@ -273,7 +273,13 @@ def apply_filters_to_model(
     config: Dict[str, Any],
     regime: Optional[str] = None,
 ) -> TradingModel:
-    """Применяет конфиг фильтров к модели (чистая функция)."""
+    """
+    Применяет конфиг фильтров к модели.
+
+    Важно: сохраняем различия между профилями моделей. Конфиг выступает
+    базовой "кривой строгости", а параметры конкретной модели масштабируются
+    относительно базовой (balanced) модели.
+    """
     filters = config["filters"]
     volume = filters["volume"]
     trend = filters["trend"]
@@ -283,13 +289,27 @@ def apply_filters_to_model(
     pullback = filters["pullback"]
     rr = filters.get("rr", {})
 
-    min_volume_ratio = float(volume["min_ratio"])
+    base_model = MODELS.get("balanced", model)
+    profile_model = MODELS.get(model.name, model)
+
+    min_volume_ratio = _scale_by_profile(
+        cfg_value=float(volume["min_ratio"]),
+        profile_value=float(profile_model.min_volume_ratio),
+        base_value=float(base_model.min_volume_ratio),
+        floor=0.1,
+    )
     if regime == "high_volatility":
-        min_volume_ratio = float(volume["high_vol_ratio"])
+        min_volume_ratio = _scale_by_profile(
+            cfg_value=float(volume["high_vol_ratio"]),
+            profile_value=float(profile_model.min_volume_ratio),
+            base_value=float(base_model.min_volume_ratio),
+            floor=0.1,
+        )
 
     if trend["enabled"]:
-        trend_required = bool(model.trend_required and trend["require_ma_alignment"])
-        allow_range = bool(trend["allow_range"])
+        trend_required = bool(profile_model.trend_required and trend["require_ma_alignment"])
+        # Не сплющиваем профили: range-поведение остается модельным.
+        allow_range = bool(profile_model.allow_range)
     else:
         trend_required = False
         allow_range = True
@@ -301,19 +321,71 @@ def apply_filters_to_model(
         rsi_overbought = 100
         rsi_oversold = 0
 
+    scaled_min_trend_strength = _scale_by_profile(
+        cfg_value=float(trend["min_strength_pct"]),
+        profile_value=float(profile_model.min_trend_strength),
+        base_value=float(base_model.min_trend_strength),
+        floor=0.0,
+    )
+    scaled_atr_multiplier = _scale_by_profile(
+        cfg_value=float(atr["stop_multiplier"]),
+        profile_value=float(profile_model.atr_multiplier_stop),
+        base_value=float(base_model.atr_multiplier_stop),
+        floor=0.01,
+    )
+    scaled_max_risk = _scale_by_profile(
+        cfg_value=float(risk["risk_per_trade_pct"]),
+        profile_value=float(profile_model.max_risk_percent),
+        base_value=float(base_model.max_risk_percent),
+        floor=0.01,
+    )
+    scaled_max_distance_ma50 = _scale_by_profile(
+        cfg_value=float(pullback["max_ma50_distance_pct"]),
+        profile_value=float(profile_model.max_distance_ma50),
+        base_value=float(base_model.max_distance_ma50),
+        floor=0.1,
+    )
+    # Pullback из конфига остается жестким верхним пределом.
+    scaled_max_distance_ma50 = min(
+        scaled_max_distance_ma50,
+        float(pullback["max_ma50_distance_pct"]),
+    )
+
+    cfg_rr = float(rr.get("min_rr", 2.5))
+    scaled_min_rr = _scale_by_profile(
+        cfg_value=cfg_rr,
+        profile_value=float(profile_model.min_rr),
+        base_value=float(base_model.min_rr),
+        floor=0.0,
+    )
+
     return replace(
         model,
         min_volume_ratio=min_volume_ratio,
-        min_trend_strength=float(trend["min_strength_pct"]),
+        min_trend_strength=scaled_min_trend_strength,
         trend_required=trend_required,
         allow_range=allow_range,
         rsi_overbought=rsi_overbought,
         rsi_oversold=rsi_oversold,
-        atr_multiplier_stop=float(atr["stop_multiplier"]),
-        max_risk_percent=float(risk["risk_per_trade_pct"]),
-        max_distance_ma50=float(pullback["max_ma50_distance_pct"]),
-        min_rr=max(float(rr.get("min_rr", 2.5)), 2.5),
+        atr_multiplier_stop=scaled_atr_multiplier,
+        max_risk_percent=scaled_max_risk,
+        max_distance_ma50=scaled_max_distance_ma50,
+        min_rr=max(2.5, scaled_min_rr),
     )
+
+
+def _scale_by_profile(
+    *,
+    cfg_value: float,
+    profile_value: float,
+    base_value: float,
+    floor: float,
+) -> float:
+    """Масштабирует cfg-значение с сохранением относительного профиля модели."""
+    if base_value <= 0:
+        return max(floor, cfg_value)
+    ratio = profile_value / base_value
+    return max(floor, cfg_value * ratio)
 
 
 def _req_dict(container: dict, key: str) -> dict:

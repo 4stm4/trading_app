@@ -18,6 +18,16 @@ from .regime_detection import classify_market_regime, performance_by_regime
 from .risk_model import estimate_risk_of_ruin_from_backtest
 
 
+DEFAULT_MAX_HOLDING_CANDLES = 50
+DEFAULT_LOOKBACK_WINDOW = 300
+DEFAULT_TRAIN_RATIO = 0.7
+
+RUNTIME_KWARGS_KEYS = {
+    "max_holding_candles",
+    "lookback_window",
+    "train_ratio",
+}
+
 SIGNAL_KWARGS_KEYS = {
     "volume_mode",
     "structure_mode",
@@ -33,6 +43,9 @@ SIGNAL_KWARGS_KEYS = {
     "contract_multiplier",
     "filter_config",
     "min_expected_trades_per_month",
+    "max_holding_candles",
+    "lookback_window",
+    "train_ratio",
 }
 
 
@@ -49,6 +62,12 @@ def evaluate_model(
     """
     Возвращает (stats_dict, raw_result_object).
     """
+    signal_kwargs = signal_kwargs or {}
+    runtime_params = _extract_runtime_params(signal_kwargs)
+    max_holding_candles = runtime_params['max_holding_candles']
+    lookback_window = runtime_params['lookback_window']
+    train_ratio = runtime_params['train_ratio']
+
     runtime = _build_signal_runtime(
         adaptive_regime=adaptive_regime,
         signal_kwargs=signal_kwargs,
@@ -70,9 +89,9 @@ def evaluate_model(
                 deposit=deposit,
                 model=model,
                 signal_kwargs=runtime['signal_kwargs'],
-                lookback_window=300,
-                max_holding_candles=50,
-                train_ratio=0.7,
+                lookback_window=lookback_window,
+                max_holding_candles=max_holding_candles,
+                train_ratio=train_ratio,
                 monte_carlo_simulations=monte_carlo_simulations,
                 risk_constraints=runtime.get('risk_constraints'),
                 execution_config=runtime.get('execution_config'),
@@ -85,7 +104,7 @@ def evaluate_model(
         robustness = wf_dict['robustness']
         monte_carlo = wf_dict.get('monte_carlo')
 
-        _, test_df = split_train_test(df, train_ratio=0.7)
+        _, test_df = split_train_test(df, train_ratio=train_ratio)
         regimes = classify_market_regime(test_df)
         regime_stats = performance_by_regime(
             wf.test_results.trades,
@@ -141,8 +160,8 @@ def evaluate_model(
         signal_generator=runtime['signal_generator'],
         deposit=deposit,
         model=model,
-        lookback_window=300,
-        max_holding_candles=50,
+        lookback_window=lookback_window,
+        max_holding_candles=max_holding_candles,
         signal_kwargs=runtime['signal_kwargs'],
         debug_filters=debug_filters,
         on_trade_close=runtime['on_trade_close'],
@@ -192,7 +211,9 @@ def _build_signal_runtime(adaptive_regime: bool, signal_kwargs: Optional[dict]) 
 
     if not adaptive_regime:
         filtered_kwargs = {
-            k: v for k, v in signal_kwargs.items() if k in SIGNAL_KWARGS_KEYS
+            k: v
+            for k, v in signal_kwargs.items()
+            if k in SIGNAL_KWARGS_KEYS and k not in RUNTIME_KWARGS_KEYS
         }
         return {
             'signal_generator': generate_signal,
@@ -242,9 +263,15 @@ def _run_walk_forward_adaptive(
     runtime: dict[str, Any],
     monte_carlo_simulations: int
 ) -> WalkForwardResult:
-    train_df, test_df = split_train_test(df, train_ratio=0.7)
-    train_lookback = _adaptive_lookback(len(train_df), 300, 50)
-    test_lookback = _adaptive_lookback(len(test_df), 300, 50)
+    adaptive_kwargs = runtime.get('adaptive_signal_kwargs', {})
+    runtime_params = _extract_runtime_params(adaptive_kwargs)
+    max_holding_candles = runtime_params['max_holding_candles']
+    lookback_window = runtime_params['lookback_window']
+    train_ratio = runtime_params['train_ratio']
+
+    train_df, test_df = split_train_test(df, train_ratio=train_ratio)
+    train_lookback = _adaptive_lookback(len(train_df), lookback_window, max_holding_candles)
+    test_lookback = _adaptive_lookback(len(test_df), lookback_window, max_holding_candles)
 
     train_backtest = run_backtest(
         df=train_df,
@@ -252,7 +279,7 @@ def _run_walk_forward_adaptive(
         deposit=deposit,
         model=model,
         lookback_window=train_lookback,
-        max_holding_candles=50,
+        max_holding_candles=max_holding_candles,
         signal_kwargs=runtime['signal_kwargs'],
         debug_filters=False,
         on_trade_close=runtime['on_trade_close'],
@@ -286,7 +313,7 @@ def _run_walk_forward_adaptive(
         deposit=deposit,
         model=model,
         lookback_window=test_lookback,
-        max_holding_candles=50,
+        max_holding_candles=max_holding_candles,
         signal_kwargs=test_runtime['signal_kwargs'],
         debug_filters=False,
         on_trade_close=test_runtime['on_trade_close'],
@@ -327,6 +354,50 @@ def _adaptive_lookback(df_len: int, default_lookback: int, max_holding_candles: 
         return 20
     max_allowed = max(20, df_len - max_holding_candles - 1)
     return min(default_lookback, max_allowed)
+
+
+def _extract_runtime_params(signal_kwargs: dict[str, Any]) -> dict[str, Any]:
+    max_holding_candles = _safe_int(
+        signal_kwargs.get('max_holding_candles', DEFAULT_MAX_HOLDING_CANDLES),
+        default=DEFAULT_MAX_HOLDING_CANDLES,
+        min_value=1,
+    )
+    lookback_window = _safe_int(
+        signal_kwargs.get('lookback_window', DEFAULT_LOOKBACK_WINDOW),
+        default=DEFAULT_LOOKBACK_WINDOW,
+        min_value=20,
+    )
+    train_ratio = _safe_float(
+        signal_kwargs.get('train_ratio', DEFAULT_TRAIN_RATIO),
+        default=DEFAULT_TRAIN_RATIO,
+        min_value=0.05,
+        max_value=0.95,
+    )
+    return {
+        'max_holding_candles': max_holding_candles,
+        'lookback_window': lookback_window,
+        'train_ratio': train_ratio,
+    }
+
+
+def _safe_int(value: Any, default: int, min_value: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(min_value, parsed)
+
+
+def _safe_float(value: Any, default: float, min_value: float, max_value: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < min_value:
+        return min_value
+    if parsed > max_value:
+        return max_value
+    return parsed
 
 
 def _classic_score(model_stats: dict[str, Any]) -> float:

@@ -11,6 +11,7 @@ import pandas as pd
 
 from adapters.moex.iss_client import MOEXAdapter
 from adapters.moex.indicator_dataset import load_data_with_indicators
+from loguru import logger
 from services.strategy_engine.indicators import get_latest_signals
 
 
@@ -104,10 +105,10 @@ def run_probe(args: argparse.Namespace) -> int:
     pd.set_option('display.max_columns', None)
     pd.set_option('display.precision', 2)
 
-    print('='*80)
-    print(f'Загрузка данных для {args.ticker} на таймфрейме {args.timeframe}')
-    print(f'Движок: {args.engine}, Рынок: {args.market}, Режим торгов: {board}')
-    print('='*80)
+    logger.info('='*80)
+    logger.info(f'Загрузка данных для {args.ticker} на таймфрейме {args.timeframe}')
+    logger.info(f'Движок: {args.engine}, Рынок: {args.market}, Режим торгов: {board}')
+    logger.info('='*80)
 
     adapter = MOEXAdapter(engine=args.engine, market=args.market)
     df, volume_stats = load_data_with_indicators(
@@ -122,41 +123,41 @@ def run_probe(args: argparse.Namespace) -> int:
     )
 
     if df.empty:
-        print(f'\n❌ Нет данных для {args.ticker}')
-        print('\nПопробуйте изменить параметры:')
-        print('  - Для фьючерсов: --engine futures --market forts')
-        print('  - Для акций: --engine stock --market shares')
+        logger.info(f'\n❌ Нет данных для {args.ticker}')
+        logger.info('\nПопробуйте изменить параметры:')
+        logger.info('  - Для фьючерсов: --engine futures --market forts')
+        logger.info('  - Для акций: --engine stock --market shares')
         return 1
 
     ma_cols = [f'ma{p}' for p in ma_periods]
     display_cols = ['open', 'high', 'low', 'close', 'volume'] + ma_cols + ['rsi']
     display_cols = [col for col in display_cols if col in df.columns]
 
-    print(f'\nПоследние {args.rows} записей:')
-    print(df[display_cols].tail(args.rows))
+    logger.info(f'\nПоследние {args.rows} записей:')
+    logger.info(df[display_cols].tail(args.rows))
 
-    print('\n' + '='*80)
-    print('Статистика объема:')
-    print('='*80)
+    logger.info('\n' + '='*80)
+    logger.info('Статистика объема:')
+    logger.info('='*80)
     for key, value in volume_stats.items():
-        print(f'{key:20s}: {value:,.0f}')
+        logger.info(f'{key:20s}: {value:,.0f}')
 
-    print('\n' + '='*80)
-    print('Последние сигналы:')
-    print('='*80)
+    logger.info('\n' + '='*80)
+    logger.info('Последние сигналы:')
+    logger.info('='*80)
     signals = get_latest_signals(df)
     for key, value in signals.items():
         if key == 'timestamp':
-            print(f'{key:20s}: {value}')
+            logger.info(f'{key:20s}: {value}')
         elif isinstance(value, (int, float)):
-            print(f'{key:20s}: {value:.2f}')
+            logger.info(f'{key:20s}: {value:.2f}')
         else:
-            print(f'{key:20s}: {value}')
+            logger.info(f'{key:20s}: {value}')
 
-    print('\n' + '='*80)
-    print(f'Всего загружено свечей: {len(df)}')
-    print(f'Период: {df.index[0]} - {df.index[-1]}')
-    print('='*80 + '\n')
+    logger.info('\n' + '='*80)
+    logger.info(f'Всего загружено свечей: {len(df)}')
+    logger.info(f'Период: {df.index[0]} - {df.index[-1]}')
+    logger.info('='*80 + '\n')
     return 0
 
 

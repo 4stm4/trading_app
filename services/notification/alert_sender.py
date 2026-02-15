@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 
 import requests
+from loguru import logger
 
 
 @dataclass
@@ -35,7 +36,8 @@ class AlertSender:
         formatted = f"{prefix} [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}"
 
         if self.enabled_console:
-            print(formatted)
+            log_method = getattr(logger, level, logger.info)
+            log_method(formatted)
 
         self._send_telegram(formatted)
 

@@ -200,11 +200,26 @@ def generate_signal(
                 debug_filter_stage='filtered_trend'
             )
 
-    # Фильтр по силе тренда (soft warning)
+    # Фильтр по силе тренда (hard)
     trend_strength = float(structure_info.get('trend_strength', 0.0))
-    if trend_strength + 1e-9 < float(model.min_trend_strength):
-        warnings.append(
-            f"Слабый тренд: {trend_strength:.3f}% < {float(model.min_trend_strength):.3f}%"
+    if (
+        not disable_trend
+        and structure_info.get('structure') in {'uptrend', 'downtrend'}
+        and trend_strength + 1e-9 < float(model.min_trend_strength)
+    ):
+        return _create_no_signal_with_data(
+            deposit,
+            f"Слабый тренд: {trend_strength:.3f}% < {float(model.min_trend_strength):.3f}%",
+            current_price,
+            current_atr,
+            current_rsi,
+            dist_ma50,
+            dist_ma200,
+            volume_info['volume_ratio'],
+            structure_info,
+            model.name,
+            debug_potential_setup=potential_setup if debug_filters else False,
+            debug_filter_stage='filtered_trend'
         )
 
     # Определяем базовое направление
@@ -710,6 +725,27 @@ def _generate_signal_conservative_v2(
             model_name=model.name,
             debug_potential_setup=potential_setup if debug_filters else False,
             debug_filter_stage='no_setup',
+        )
+
+    trend_strength = float(structure_info.get('trend_strength', 0.0))
+    if (
+        not disable_trend
+        and entry_context == 'trend'
+        and trend_strength + 1e-9 < float(model.min_trend_strength)
+    ):
+        return _create_no_signal_with_data(
+            deposit=deposit,
+            reason=f"Слабый тренд: {trend_strength:.3f}% < {float(model.min_trend_strength):.3f}%",
+            price=current_price,
+            atr=current_atr,
+            rsi=current_rsi,
+            dist_ma50=dist_ma50,
+            dist_ma200=dist_ma200,
+            volume_ratio=volume_info['volume_ratio'],
+            structure_info=structure_info,
+            model_name=model.name,
+            debug_potential_setup=potential_setup if debug_filters else False,
+            debug_filter_stage='filtered_trend',
         )
 
     # Жесткая проверка качества тренда по MA-выравниванию.

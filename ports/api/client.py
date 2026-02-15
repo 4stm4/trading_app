@@ -5,6 +5,8 @@ Python клиент для Trading System API
 import requests
 from typing import Dict, Optional
 
+from loguru import logger
+
 
 class TradingSystemClient:
     """
@@ -217,17 +219,17 @@ if __name__ == "__main__":
 
     # Проверяем работоспособность
     health = client.health_check()
-    print(f"✅ API Status: {health['status']}")
-    print(f"   Models available: {health['models_count']}")
+    logger.info(f"✅ API Status: {health['status']}")
+    logger.info(f"   Models available: {health['models_count']}")
 
     # Получаем список моделей
     models = client.get_models()
-    print(f"\n📊 Доступные модели:")
+    logger.info(f"\n📊 Доступные модели:")
     for name, info in models['models'].items():
-        print(f"   {name:15s} - RR {info['min_rr']}, Risk {info['max_risk_percent']}%")
+        logger.info(f"   {name:15s} - RR {info['min_rr']}, Risk {info['max_risk_percent']}%")
 
     # Получаем сигнал для Сбербанка
-    print(f"\n🎯 Генерация сигнала для SBER...")
+    logger.info(f"\n🎯 Генерация сигнала для SBER...")
     signal = client.get_signal(
         ticker="SBER",
         deposit=100000,
@@ -235,14 +237,14 @@ if __name__ == "__main__":
         model="balanced"
     )
 
-    print(f"   Направление: {signal['signal']['signal']}")
-    print(f"   Уверенность: {signal['signal']['confidence']}")
+    logger.info(f"   Направление: {signal['signal']['signal']}")
+    logger.info(f"   Уверенность: {signal['signal']['confidence']}")
     if signal['signal']['signal'] != 'none':
-        print(f"   Вход: {signal['signal']['entry']}")
-        print(f"   RR: {signal['signal']['rr']}")
+        logger.info(f"   Вход: {signal['signal']['entry']}")
+        logger.info(f"   RR: {signal['signal']['rr']}")
 
     # Запускаем бэктест
-    print(f"\n📈 Запуск бэктеста...")
+    logger.info(f"\n📈 Запуск бэктеста...")
     backtest = client.run_backtest(
         ticker="GAZP",
         deposit=200000,
@@ -250,21 +252,21 @@ if __name__ == "__main__":
     )
 
     results = backtest['results']
-    print(f"   Всего сделок: {results['total_trades']}")
-    print(f"   Winrate: {results['winrate']}%")
-    print(f"   Profit Factor: {results['profit_factor']}")
-    print(f"   Expectancy: {results['expectancy']}")
+    logger.info(f"   Всего сделок: {results['total_trades']}")
+    logger.info(f"   Winrate: {results['winrate']}%")
+    logger.info(f"   Profit Factor: {results['profit_factor']}")
+    logger.info(f"   Expectancy: {results['expectancy']}")
 
     # Оптимизация
-    print(f"\n🔧 Оптимизация моделей...")
+    logger.info(f"\n🔧 Оптимизация моделей...")
     optimization = client.optimize(
         ticker="LKOH",
         deposit=300000,
         timeframe="1h"
     )
 
-    print(f"   Протестировано моделей: {optimization['models_tested']}")
-    print(f"   Лучшая модель: {optimization['best_model']['name']}")
-    print(f"   Expectancy: {optimization['best_model']['expectancy']}")
+    logger.info(f"   Протестировано моделей: {optimization['models_tested']}")
+    logger.info(f"   Лучшая модель: {optimization['best_model']['name']}")
+    logger.info(f"   Expectancy: {optimization['best_model']['expectancy']}")
 
-    print("\n✅ Все примеры выполнены!")
+    logger.info("\n✅ Все примеры выполнены!")

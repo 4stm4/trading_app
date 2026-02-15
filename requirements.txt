@@ -6,6 +6,7 @@ dash-bootstrap-components
 Flask
 Flask-Login
 Flask-SQLAlchemy
+loguru
 pandas
 pydantic
 pydantic-settings

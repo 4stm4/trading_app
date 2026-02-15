@@ -27,6 +27,7 @@ from services.strategy_engine.setup_generator import (
     load_setups_json,
 )
 from services.notification.alert_sender import AlertSender
+from loguru import logger
 from services.strategy_engine.filter_config import (
     apply_filters_to_model,
     load_config,
@@ -160,7 +161,7 @@ def colorize(text: str, color: Optional[str] = None, bright: bool = False) -> st
 
 
 def print_separator(char='=', length=80, color: Optional[str] = 'cyan'):
-    print(colorize(char * length, color=color, bright=True))
+    logger.info(colorize(char * length, color=color, bright=True))
 
 
 def estimate_signal_fee(signal_dict: dict, cost_config: dict[str, Any]) -> float:
@@ -191,18 +192,18 @@ def estimate_signal_fee(signal_dict: dict, cost_config: dict[str, Any]) -> float
 def print_model_info(model):
     """Вывод информации о модели"""
     print_separator(color='blue')
-    print(colorize(f"📊 АКТИВНАЯ МОДЕЛЬ: {model.name.upper()}", 'blue', bright=True))
+    logger.info(colorize(f"📊 АКТИВНАЯ МОДЕЛЬ: {model.name.upper()}", 'blue', bright=True))
     print_separator(color='blue')
-    print(f"\n📝 Описание: {model.description}")
-    print(f"\n📉 Параметры:")
-    print(f"   Min RR:              {model.min_rr}")
-    print(f"   Max Risk:            {model.max_risk_percent}%")
-    print(f"   Volume filter:       {model.min_volume_ratio}x")
-    print(f"   Trend required:      {'Yes' if model.trend_required else 'No'}")
-    print(f"   Allow range:         {'Yes' if model.allow_range else 'No'}")
-    print(f"   ATR stop multiplier: {model.atr_multiplier_stop}")
-    print(f"   Min confidence:      {model.min_confidence}")
-    print(f"   Min trend strength:  {model.min_trend_strength}%")
+    logger.info(f"\n📝 Описание: {model.description}")
+    logger.info(f"\n📉 Параметры:")
+    logger.info(f"   Min RR:              {model.min_rr}")
+    logger.info(f"   Max Risk:            {model.max_risk_percent}%")
+    logger.info(f"   Volume filter:       {model.min_volume_ratio}x")
+    logger.info(f"   Trend required:      {'Yes' if model.trend_required else 'No'}")
+    logger.info(f"   Allow range:         {'Yes' if model.allow_range else 'No'}")
+    logger.info(f"   ATR stop multiplier: {model.atr_multiplier_stop}")
+    logger.info(f"   Min confidence:      {model.min_confidence}")
+    logger.info(f"   Min trend strength:  {model.min_trend_strength}%")
     print_separator()
 
 
@@ -213,7 +214,7 @@ def print_signal_report(
 ):
     """Красивый вывод торгового сигнала"""
     print_separator(color='blue')
-    print(colorize("📊 ТОРГОВЫЙ СИГНАЛ", 'blue', bright=True))
+    logger.info(colorize("📊 ТОРГОВЫЙ СИГНАЛ", 'blue', bright=True))
     print_separator(color='blue')
 
     signal_emoji = {
@@ -222,48 +223,48 @@ def print_signal_report(
         'none': '⚪ НЕТ СИГНАЛА'
     }
     direction_color = {'long': 'green', 'short': 'red', 'none': 'yellow'}.get(signal_dict['signal'], 'white')
-    print(f"\nНаправление: {colorize(signal_emoji.get(signal_dict['signal'], signal_dict['signal']), direction_color, bright=True)}")
-    print(f"Уверенность: {signal_dict['confidence'].upper()}")
+    logger.info(f"\nНаправление: {colorize(signal_emoji.get(signal_dict['signal'], signal_dict['signal']), direction_color, bright=True)}")
+    logger.info(f"Уверенность: {signal_dict['confidence'].upper()}")
 
     if signal_dict['signal'] != 'none':
         effective_multiplier = contract_multiplier if contract_multiplier > 0 else 1.0
 
-        print(f"\n💰 ПАРАМЕТРЫ СДЕЛКИ:")
-        print(f"   Вход:     {signal_dict['entry']:.2f}")
-        print(f"   Стоп:     {signal_dict['stop']:.2f}")
-        print(f"   Цель:     {signal_dict['target']:.2f}")
-        print(f"   RR:       {signal_dict['rr']:.2f}")
+        logger.info(f"\n💰 ПАРАМЕТРЫ СДЕЛКИ:")
+        logger.info(f"   Вход:     {signal_dict['entry']:.2f}")
+        logger.info(f"   Стоп:     {signal_dict['stop']:.2f}")
+        logger.info(f"   Цель:     {signal_dict['target']:.2f}")
+        logger.info(f"   RR:       {signal_dict['rr']:.2f}")
 
-        print(f"\n📈 РИСК-МЕНЕДЖМЕНТ:")
-        print(f"   Размер позиции:  {signal_dict['position_size']:.0f} контрактов")
-        print(f"   Риск в рублях:   {signal_dict['risk_rub']:.2f} ₽")
-        print(f"   Риск в %:        {signal_dict['risk_percent']:.2f}%")
+        logger.info(f"\n📈 РИСК-МЕНЕДЖМЕНТ:")
+        logger.info(f"   Размер позиции:  {signal_dict['position_size']:.0f} контрактов")
+        logger.info(f"   Риск в рублях:   {signal_dict['risk_rub']:.2f} ₽")
+        logger.info(f"   Риск в %:        {signal_dict['risk_percent']:.2f}%")
         fee_estimate = estimate_signal_fee(signal_dict, cost_config or {})
-        print(f"   Fee (оценка):    {fee_estimate:.2f} ₽")
+        logger.info(f"   Fee (оценка):    {fee_estimate:.2f} ₽")
         potential_profit = (
             abs(signal_dict['target'] - signal_dict['entry'])
             * signal_dict['position_size']
             * effective_multiplier
         )
-        print(f"   Потенциал:       {potential_profit:.2f} ₽")
+        logger.info(f"   Потенциал:       {potential_profit:.2f} ₽")
 
-    print(f"\n📉 СТРУКТУРА РЫНКА:")
-    print(f"   Тренд:           {signal_dict['structure']}")
-    print(f"   Фаза:            {signal_dict['phase']}")
-    print(f"   ATR:             {signal_dict['atr']:.2f}")
+    logger.info(f"\n📉 СТРУКТУРА РЫНКА:")
+    logger.info(f"   Тренд:           {signal_dict['structure']}")
+    logger.info(f"   Фаза:            {signal_dict['phase']}")
+    logger.info(f"   ATR:             {signal_dict['atr']:.2f}")
     if signal_dict.get('market_regime'):
-        print(f"   Regime:          {signal_dict['market_regime']}")
+        logger.info(f"   Regime:          {signal_dict['market_regime']}")
 
-    print(f"\n📊 ИНДИКАТОРЫ:")
-    print(f"   RSI:             {signal_dict['rsi']:.1f}")
-    print(f"   Расст. до MA50:  {signal_dict['distance_ma50_pct']:+.2f}%")
-    print(f"   Расст. до MA200: {signal_dict['distance_ma200_pct']:+.2f}%")
-    print(f"   Volume ratio:    {signal_dict['volume_ratio']:.2f}x")
+    logger.info(f"\n📊 ИНДИКАТОРЫ:")
+    logger.info(f"   RSI:             {signal_dict['rsi']:.1f}")
+    logger.info(f"   Расст. до MA50:  {signal_dict['distance_ma50_pct']:+.2f}%")
+    logger.info(f"   Расст. до MA200: {signal_dict['distance_ma200_pct']:+.2f}%")
+    logger.info(f"   Volume ratio:    {signal_dict['volume_ratio']:.2f}x")
 
     if signal_dict['warnings']:
-        print(colorize("\n⚠️  ПРЕДУПРЕЖДЕНИЯ:", 'yellow', bright=True))
+        logger.info(colorize("\n⚠️  ПРЕДУПРЕЖДЕНИЯ:", 'yellow', bright=True))
         for warning in signal_dict['warnings']:
-            print(colorize(f"   • {warning}", 'yellow'))
+            logger.info(colorize(f"   • {warning}", 'yellow'))
 
     print_separator(color='blue')
 
@@ -271,92 +272,92 @@ def print_signal_report(
 def print_backtest_report(backtest: dict, show_details: bool = True):
     """Красивый вывод результатов бэктеста"""
     print_separator(color='blue')
-    print(colorize(f"📈 РЕЗУЛЬТАТЫ БЭКТЕСТА - {backtest['model_name'].upper()}", 'blue', bright=True))
+    logger.info(colorize(f"📈 РЕЗУЛЬТАТЫ БЭКТЕСТА - {backtest['model_name'].upper()}", 'blue', bright=True))
     print_separator(color='blue')
 
     if backtest['total_trades'] == 0:
-        print(colorize("\n❌ Сделок не найдено", 'red', bright=True))
+        logger.info(colorize("\n❌ Сделок не найдено", 'red', bright=True))
         return
 
-    print(f"\n📊 СТАТИСТИКА:")
-    print(f"   Всего сделок:     {backtest['total_trades']}")
-    print(f"   Прибыльных:       {backtest['winning_trades']} ({backtest['winrate']:.1f}%)")
-    print(f"   Убыточных:        {backtest['losing_trades']}")
+    logger.info(f"\n📊 СТАТИСТИКА:")
+    logger.info(f"   Всего сделок:     {backtest['total_trades']}")
+    logger.info(f"   Прибыльных:       {backtest['winning_trades']} ({backtest['winrate']:.1f}%)")
+    logger.info(f"   Убыточных:        {backtest['losing_trades']}")
     if 'gross_winning_trades' in backtest:
-        print(
+        logger.info(
             "   Gross прибыльных: "
             f"{backtest['gross_winning_trades']} ({backtest.get('gross_winrate', 0):.1f}%)"
         )
-    print(f"   Средняя длит.:    {backtest['avg_trade_duration']} свечей")
+    logger.info(f"   Средняя длит.:    {backtest['avg_trade_duration']} свечей")
 
     if show_details:
         initial_deposit = backtest['final_balance'] - backtest['total_profit']
-        print(f"\n💰 ФИНАНСЫ:")
-        print(f"   Начальный депо:   {initial_deposit:.2f} ₽")
-        print(f"   Конечный депо:    {backtest['final_balance']:.2f} ₽")
+        logger.info(f"\n💰 ФИНАНСЫ:")
+        logger.info(f"   Начальный депо:   {initial_deposit:.2f} ₽")
+        logger.info(f"   Конечный депо:    {backtest['final_balance']:.2f} ₽")
         if 'gross_total_profit' in backtest:
-            print(f"   Gross PnL:        {backtest['gross_total_profit']:+.2f} ₽")
-            print(f"   Fees:             -{backtest.get('total_fees', 0):.2f} ₽")
-            print(f"   Slippage:         -{backtest.get('total_slippage', 0):.2f} ₽")
-            print(f"   Total costs:      -{backtest.get('total_costs', 0):.2f} ₽")
-        print(f"   Чистая прибыль:   {backtest['total_profit']:+.2f} ₽")
-        print(f"   Доходность:       {backtest['return_pct']:+.2f}%")
+            logger.info(f"   Gross PnL:        {backtest['gross_total_profit']:+.2f} ₽")
+            logger.info(f"   Fees:             -{backtest.get('total_fees', 0):.2f} ₽")
+            logger.info(f"   Slippage:         -{backtest.get('total_slippage', 0):.2f} ₽")
+            logger.info(f"   Total costs:      -{backtest.get('total_costs', 0):.2f} ₽")
+        logger.info(f"   Чистая прибыль:   {backtest['total_profit']:+.2f} ₽")
+        logger.info(f"   Доходность:       {backtest['return_pct']:+.2f}%")
 
-    print(f"\n📈 МЕТРИКИ:")
+    logger.info(f"\n📈 МЕТРИКИ:")
     if 'avg_risk_per_trade' in backtest:
-        print(f"   Ср. риск/сделку:  {backtest['avg_risk_per_trade']:.2f} ₽")
-    print(f"   Средний выигрыш:  {backtest['avg_win']:.2f} ₽")
-    print(f"   Средний проигрыш: {backtest['avg_loss']:.2f} ₽")
-    print(f"   Лучшая сделка:    {backtest['best_trade']:.2f} ₽")
-    print(f"   Худшая сделка:    {backtest['worst_trade']:.2f} ₽")
-    print(f"   Expectancy:       {backtest['expectancy']:.2f} ₽")
+        logger.info(f"   Ср. риск/сделку:  {backtest['avg_risk_per_trade']:.2f} ₽")
+    logger.info(f"   Средний выигрыш:  {backtest['avg_win']:.2f} ₽")
+    logger.info(f"   Средний проигрыш: {backtest['avg_loss']:.2f} ₽")
+    logger.info(f"   Лучшая сделка:    {backtest['best_trade']:.2f} ₽")
+    logger.info(f"   Худшая сделка:    {backtest['worst_trade']:.2f} ₽")
+    logger.info(f"   Expectancy:       {backtest['expectancy']:.2f} ₽")
     if 'expectancy_r' in backtest:
-        print(f"   Avg Win (R):      {backtest['avg_win_r']:.2f}R")
-        print(f"   Avg Loss (R):     {backtest['avg_loss_r']:.2f}R")
-        print(f"   Best/Worst (R):   {backtest['best_trade_r']:.2f}R / {backtest['worst_trade_r']:.2f}R")
-        print(f"   Expectancy (R):   {backtest['expectancy_r']:.3f}R")
-    print(f"   Profit Factor:    {backtest['profit_factor']:.2f}")
+        logger.info(f"   Avg Win (R):      {backtest['avg_win_r']:.2f}R")
+        logger.info(f"   Avg Loss (R):     {backtest['avg_loss_r']:.2f}R")
+        logger.info(f"   Best/Worst (R):   {backtest['best_trade_r']:.2f}R / {backtest['worst_trade_r']:.2f}R")
+        logger.info(f"   Expectancy (R):   {backtest['expectancy_r']:.3f}R")
+    logger.info(f"   Profit Factor:    {backtest['profit_factor']:.2f}")
     if 'gross_profit_factor' in backtest:
-        print(f"   Gross PF:         {backtest['gross_profit_factor']:.2f}")
-    print(f"   Sharpe Ratio:     {backtest['sharpe_ratio']:.2f}")
-    print(f"   Max Drawdown:     {backtest['max_drawdown_percent']:.2f}%")
+        logger.info(f"   Gross PF:         {backtest['gross_profit_factor']:.2f}")
+    logger.info(f"   Sharpe Ratio:     {backtest['sharpe_ratio']:.2f}")
+    logger.info(f"   Max Drawdown:     {backtest['max_drawdown_percent']:.2f}%")
 
     if show_details:
         # Оценка системы
-        print(f"\n🎯 ОЦЕНКА СИСТЕМЫ:")
+        logger.info(f"\n🎯 ОЦЕНКА СИСТЕМЫ:")
         score = 0
         if backtest['winrate'] >= 40:
             score += 1
-            print(colorize("   ✅ Winrate >= 40%", 'green'))
+            logger.info(colorize("   ✅ Winrate >= 40%", 'green'))
         else:
-            print(colorize("   ❌ Winrate < 40%", 'red'))
+            logger.info(colorize("   ❌ Winrate < 40%", 'red'))
 
         if backtest['profit_factor'] >= 1.5:
             score += 1
-            print(colorize("   ✅ Profit Factor >= 1.5", 'green'))
+            logger.info(colorize("   ✅ Profit Factor >= 1.5", 'green'))
         else:
-            print(colorize("   ❌ Profit Factor < 1.5", 'red'))
+            logger.info(colorize("   ❌ Profit Factor < 1.5", 'red'))
 
         if backtest['expectancy'] > 0:
             score += 1
-            print(colorize("   ✅ Expectancy > 0", 'green'))
+            logger.info(colorize("   ✅ Expectancy > 0", 'green'))
         else:
-            print(colorize("   ❌ Expectancy <= 0", 'red'))
+            logger.info(colorize("   ❌ Expectancy <= 0", 'red'))
 
         if backtest['max_drawdown_percent'] < 20:
             score += 1
-            print(colorize("   ✅ Drawdown < 20%", 'green'))
+            logger.info(colorize("   ✅ Drawdown < 20%", 'green'))
         else:
-            print(colorize("   ⚠️  Drawdown >= 20%", 'yellow'))
+            logger.info(colorize("   ⚠️  Drawdown >= 20%", 'yellow'))
 
-        print(f"\n   Итоговая оценка: {score}/4")
+        logger.info(f"\n   Итоговая оценка: {score}/4")
 
         if score >= 3:
-            print(colorize("   🌟 СИСТЕМА ПЕРСПЕКТИВНА", 'green', bright=True))
+            logger.info(colorize("   🌟 СИСТЕМА ПЕРСПЕКТИВНА", 'green', bright=True))
         elif score >= 2:
-            print(colorize("   ⚠️  СИСТЕМА ТРЕБУЕТ ДОРАБОТКИ", 'yellow', bright=True))
+            logger.info(colorize("   ⚠️  СИСТЕМА ТРЕБУЕТ ДОРАБОТКИ", 'yellow', bright=True))
         else:
-            print(colorize("   ❌ СИСТЕМА НЕ РЕКОМЕНДУЕТСЯ", 'red', bright=True))
+            logger.info(colorize("   ❌ СИСТЕМА НЕ РЕКОМЕНДУЕТСЯ", 'red', bright=True))
 
     print_separator(color='blue')
 
@@ -367,28 +368,28 @@ def print_filter_debug_stats(filter_stats: dict):
         return
 
     print_separator('-', 80, color='yellow')
-    print(colorize("🔍 ДИАГНОСТИКА ФИЛЬТРАЦИИ", 'yellow', bright=True))
+    logger.info(colorize("🔍 ДИАГНОСТИКА ФИЛЬТРАЦИИ", 'yellow', bright=True))
     print_separator('-', 80, color='yellow')
-    print(f"   Potential setups:   {filter_stats['potential_setups']}")
-    print(f"   Filtered by trend:  {filter_stats['filtered_by_trend']}")
-    print(f"   Filtered by volume: {filter_stats['filtered_by_volume']}")
-    print(f"   Filtered by RR:     {filter_stats['filtered_by_rr']}")
-    print(f"   Filtered by ATR:    {filter_stats['filtered_by_atr']}")
-    print(f"   Final trades:       {filter_stats['final_trades']}")
+    logger.info(f"   Potential setups:   {filter_stats['potential_setups']}")
+    logger.info(f"   Filtered by trend:  {filter_stats['filtered_by_trend']}")
+    logger.info(f"   Filtered by volume: {filter_stats['filtered_by_volume']}")
+    logger.info(f"   Filtered by RR:     {filter_stats['filtered_by_rr']}")
+    logger.info(f"   Filtered by ATR:    {filter_stats['filtered_by_atr']}")
+    logger.info(f"   Final trades:       {filter_stats['final_trades']}")
     print_separator('-', 80, color='yellow')
 
 
 def print_setup_detected(setup: dict[str, Any]):
-    print(colorize("\n📈 NEW SETUP DETECTED", "green", bright=True))
-    print(f"Symbol: {setup['symbol']}")
-    print(f"Direction: {str(setup['direction']).upper()}")
-    print(f"Entry: {setup['entry_price']}")
-    print(f"Stop: {setup['stop_loss']}")
-    print(f"Take: {setup['take_profit']}")
-    print(f"RR: {setup['rr']}")
-    print(f"Confidence: {setup['confidence'] * 100:.0f}%")
-    print(f"Regime: {setup['regime']}")
-    print(f"Expires in: {setup.get('expires_in_candles', '?')} candles")
+    logger.info(colorize("\n📈 NEW SETUP DETECTED", "green", bright=True))
+    logger.info(f"Symbol: {setup['symbol']}")
+    logger.info(f"Direction: {str(setup['direction']).upper()}")
+    logger.info(f"Entry: {setup['entry_price']}")
+    logger.info(f"Stop: {setup['stop_loss']}")
+    logger.info(f"Take: {setup['take_profit']}")
+    logger.info(f"RR: {setup['rr']}")
+    logger.info(f"Confidence: {setup['confidence'] * 100:.0f}%")
+    logger.info(f"Regime: {setup['regime']}")
+    logger.info(f"Expires in: {setup.get('expires_in_candles', '?')} candles")
 
 
 def calculate_score(model_stats: dict) -> float:
@@ -428,12 +429,12 @@ def model_has_trade_activity(model_stats: dict) -> bool:
 def print_walk_forward_table(model_stats: dict[str, dict]):
     """Таблица устойчивости по моделям (walk-forward)."""
     if not model_stats:
-        print(colorize("\n❌ Нет данных walk-forward", 'red', bright=True))
+        logger.info(colorize("\n❌ Нет данных walk-forward", 'red', bright=True))
         return
 
-    print("\n" + "-" * 72)
-    print(f"{'Model':<15} {'PF_train':>9} {'PF_test':>8} {'Stability':>10} {'RobustScore':>12}")
-    print("-" * 72)
+    logger.info("\n" + "-" * 72)
+    logger.info(f"{'Model':<15} {'PF_train':>9} {'PF_test':>8} {'Stability':>10} {'RobustScore':>12}")
+    logger.info("-" * 72)
 
     for model_name, stats in sorted(model_stats.items(), key=lambda x: x[1].get('robustness_score', 0), reverse=True):
         stability = stats.get('stability_ratio', 0)
@@ -444,14 +445,14 @@ def print_walk_forward_table(model_stats: dict[str, dict]):
         if stats.get('overfit'):
             marker += " overfit"
 
-        print(
+        logger.info(
             f"{model_name:<15} "
             f"{stats.get('pf_train', 0):>9.2f} "
             f"{stats.get('pf_test', 0):>8.2f} "
             f"{stability:>10.2f} "
             f"{robustness:>12.2f}{marker}"
         )
-    print("-" * 72)
+    logger.info("-" * 72)
 
 
 def print_regime_performance_summary(
@@ -463,10 +464,10 @@ def print_regime_performance_summary(
     if not regime_stats:
         return
 
-    print(colorize("\n📊 REGIME PERFORMANCE SUMMARY", 'magenta', bright=True))
-    print("-" * 65)
-    print(f"{'Regime':<16} {'Trades':>8} {'PF':>8} {'MaxDD':>8} {'Return':>10}")
-    print("-" * 65)
+    logger.info(colorize("\n📊 REGIME PERFORMANCE SUMMARY", 'magenta', bright=True))
+    logger.info("-" * 65)
+    logger.info(f"{'Regime':<16} {'Trades':>8} {'PF':>8} {'MaxDD':>8} {'Return':>10}")
+    logger.info("-" * 65)
 
     rows = [
         ("trend", "Trend"),
@@ -475,19 +476,19 @@ def print_regime_performance_summary(
     ]
     for key, label in rows:
         stats = regime_stats.get(key, {})
-        print(
+        logger.info(
             f"{label:<16} "
             f"{int(stats.get('trades', 0)):>8} "
             f"{float(stats.get('pf', 0)):>8.2f} "
             f"{float(stats.get('maxdd', 0)):>8.2f}% "
             f"{float(stats.get('return_pct', 0)):>+9.2f}%"
         )
-    print("-" * 65)
+    logger.info("-" * 65)
 
     if overall_pf is not None:
-        print(f"Overall PF: {overall_pf:.2f}")
+        logger.info(f"Overall PF: {overall_pf:.2f}")
     if overall_maxdd is not None:
-        print(f"MaxDD: {overall_maxdd:.2f}%")
+        logger.info(f"MaxDD: {overall_maxdd:.2f}%")
 
 
 def print_regime_final_decision(
@@ -497,15 +498,15 @@ def print_regime_final_decision(
     disabled_regimes: Optional[dict[str, str]] = None,
 ):
     if best_regime:
-        print(colorize(f"\n🏆 Финальный режим: {best_regime} (PF {float(best_regime_pf or 0):.2f})", 'green', bright=True))
+        logger.info(colorize(f"\n🏆 Финальный режим: {best_regime} (PF {float(best_regime_pf or 0):.2f})", 'green', bright=True))
 
     if enabled_regimes:
-        print(f"Активные режимы: {', '.join(enabled_regimes)}")
+        logger.info(f"Активные режимы: {', '.join(enabled_regimes)}")
 
     if disabled_regimes:
-        print(colorize("Отключенные режимы:", 'yellow', bright=True))
+        logger.info(colorize("Отключенные режимы:", 'yellow', bright=True))
         for regime, reason in disabled_regimes.items():
-            print(colorize(f"  - {regime}: {reason}", 'yellow'))
+            logger.info(colorize(f"  - {regime}: {reason}", 'yellow'))
 
 
 def print_admission_report(admission: Optional[dict[str, Any]]):
@@ -515,15 +516,15 @@ def print_admission_report(admission: Optional[dict[str, Any]]):
     if not checks:
         return
 
-    print(colorize("\nSystem Admission:", 'cyan', bright=True))
+    logger.info(colorize("\nSystem Admission:", 'cyan', bright=True))
     for name, passed in checks.items():
         mark = colorize("PASS", 'green', bright=True) if passed else colorize("FAIL", 'red', bright=True)
-        print(f"  {name:<12} {mark}")
+        logger.info(f"  {name:<12} {mark}")
 
     if admission.get('all_passed'):
-        print(colorize("✅ Edge criteria passed", 'green', bright=True))
+        logger.info(colorize("✅ Edge criteria passed", 'green', bright=True))
     else:
-        print(colorize(f"❌ Edge criteria failed: {', '.join(admission.get('failed', []))}", 'red', bright=True))
+        logger.info(colorize(f"❌ Edge criteria failed: {', '.join(admission.get('failed', []))}", 'red', bright=True))
 
 
 def print_edge_recommendations(admission: Optional[dict[str, Any]]):
@@ -531,19 +532,19 @@ def print_edge_recommendations(admission: Optional[dict[str, Any]]):
         return
 
     failed = set(admission.get('failed', []))
-    print(colorize("\nРекомендации по улучшению edge:", 'yellow', bright=True))
+    logger.info(colorize("\nРекомендации по улучшению edge:", 'yellow', bright=True))
     if 'pf' in failed:
-        print("  1. Ослабить volume/trend фильтры на 10-15% и перезапустить walk-forward.")
+        logger.info("  1. Ослабить volume/trend фильтры на 10-15% и перезапустить walk-forward.")
     if 'expectancy' in failed:
-        print("  2. Поднять минимальный RR до 2.2 и ужесточить входы только в направлении режима.")
+        logger.info("  2. Поднять минимальный RR до 2.2 и ужесточить входы только в направлении режима.")
     if 'sharpe' in failed:
-        print("  3. Снизить risk_per_trade_pct до 0.2-0.25% для стабилизации волатильности equity.")
+        logger.info("  3. Снизить risk_per_trade_pct до 0.2-0.25% для стабилизации волатильности equity.")
     if 'maxdd' in failed:
-        print("  4. Ужесточить equity_dd_stop_pct до 6-7% и включить trailing после partial.")
+        logger.info("  4. Ужесточить equity_dd_stop_pct до 6-7% и включить trailing после partial.")
     if 'stability' in failed:
-        print("  5. Увеличить train период и отключать режимы с PF_train < 1.15.")
+        logger.info("  5. Увеличить train период и отключать режимы с PF_train < 1.15.")
     if 'risk_of_ruin' in failed:
-        print("  6. Снизить риск на сделку и ограничить торговлю только режимами с PF_test >= 1.3.")
+        logger.info("  6. Снизить риск на сделку и ограничить торговлю только режимами с PF_test >= 1.3.")
 
 def print_cross_instrument_stability(results: dict[str, dict[str, Any]]):
     """Cross-instrument устойчивость: сколько инструментов проходит у каждой модели."""
@@ -556,7 +557,7 @@ def print_cross_instrument_stability(results: dict[str, dict[str, Any]]):
         return
 
     models = list(MODELS.keys())
-    print(colorize("\nCross-Instrument Stability:", 'magenta', bright=True))
+    logger.info(colorize("\nCross-Instrument Stability:", 'magenta', bright=True))
     for model_name in models:
         stable_count = 0
         for symbol in symbols:
@@ -572,7 +573,7 @@ def print_cross_instrument_stability(results: dict[str, dict[str, Any]]):
             if is_stable:
                 stable_count += 1
 
-        print(f"   {model_name:<15} Stability across instruments: {stable_count}/{total}")
+        logger.info(f"   {model_name:<15} Stability across instruments: {stable_count}/{total}")
 
 
 def parse_symbols(symbols_arg: Optional[str]) -> list[str]:
@@ -603,9 +604,9 @@ def run_backtest_for_symbol(
     """Загрузка данных и optimize-прогон для одного инструмента"""
     if verbose:
         print_separator(color='cyan')
-        print(colorize(f"📥 Загрузка данных для {symbol}", 'cyan', bright=True))
-        print(f"   Таймфрейм: {timeframe}")
-        print(f"   Движок: {adapter.engine}, Рынок: {adapter.market}, Режим: {board}")
+        logger.info(colorize(f"📥 Загрузка данных для {symbol}", 'cyan', bright=True))
+        logger.info(f"   Таймфрейм: {timeframe}")
+        logger.info(f"   Движок: {adapter.engine}, Рынок: {adapter.market}, Режим: {board}")
         print_separator(color='cyan')
 
     try:
@@ -622,7 +623,7 @@ def run_backtest_for_symbol(
     except Exception as exc:
         error_text = f"Ошибка загрузки данных: {exc}"
         if verbose:
-            print(colorize(f"\n❌ {error_text}", 'red', bright=True))
+            logger.info(colorize(f"\n❌ {error_text}", 'red', bright=True))
         return {
             'symbol': symbol,
             'models': {},
@@ -637,7 +638,7 @@ def run_backtest_for_symbol(
 
     if df.empty:
         if verbose:
-            print(colorize(f"\n❌ Нет данных для {symbol}", 'red', bright=True))
+            logger.info(colorize(f"\n❌ Нет данных для {symbol}", 'red', bright=True))
         return {
             'symbol': symbol,
             'models': {},
@@ -650,16 +651,16 @@ def run_backtest_for_symbol(
         }
 
     if verbose:
-        print(colorize(f"✅ Загружено {len(df)} свечей", 'green', bright=True))
-        print(f"   Период: {df.index[0]} - {df.index[-1]}\n")
+        logger.info(colorize(f"✅ Загружено {len(df)} свечей", 'green', bright=True))
+        logger.info(f"   Период: {df.index[0]} - {df.index[-1]}\n")
         for warning in data_result.warnings:
-            print(warning)
+            logger.info(warning)
         if data_result.warnings:
-            print()
+            logger.info()
         print_separator(color='cyan')
-        print(colorize(f"🔄 ОПТИМИЗАЦИЯ МОДЕЛЕЙ ДЛЯ {symbol}", 'cyan', bright=True))
+        logger.info(colorize(f"🔄 ОПТИМИЗАЦИЯ МОДЕЛЕЙ ДЛЯ {symbol}", 'cyan', bright=True))
         print_separator(color='cyan')
-        print("\nЗапуск бэктеста для всех моделей...\n")
+        logger.info("\nЗапуск бэктеста для всех моделей...\n")
 
     results = []
     model_stats: dict[str, dict] = {}
@@ -685,7 +686,7 @@ def run_backtest_for_symbol(
 
     for model_name in MODELS.keys():
         if verbose:
-            print(f"  Тестирование модели: {model_name}...", end=' ')
+            logger.info(f"  Тестирование модели: {model_name}...")
         model = get_model(model_name)
         if filter_config:
             model = apply_filters_to_model(model, filter_config)
@@ -706,29 +707,29 @@ def run_backtest_for_symbol(
 
         if verbose:
             if walk_forward:
-                print(
+                logger.info(
                     f"✓ (PF train/test: {result_dict['pf_train']:.2f}/{result_dict['pf_test']:.2f}, "
                     f"DD test: {result_dict['maxdd_test']:.2f}%, "
                     f"Stability: {result_dict['stability_ratio']:.2f}, "
                     f"Robust: {result_dict['robustness_score']:.2f})"
                 )
                 if result_dict.get('unstable'):
-                    print(colorize("   ⚠ unstable (Stability ratio < 0.7)", 'yellow'))
+                    logger.info(colorize("   ⚠ unstable (Stability ratio < 0.7)", 'yellow'))
                 if result_dict.get('monte_carlo'):
                     mc = result_dict['monte_carlo']
                     prob = mc.get('probability_drawdown_over_30', 0)
-                    print(
+                    logger.info(
                         f"   MonteCarlo: worst DD {mc.get('worst_drawdown_percent', 0):.2f}%, "
                         f"q5 equity {mc.get('quantile_5_equity', 0):.2f}"
                     )
-                    print(f"   📉 Вероятность просадки > 30%: {prob:.2f}%")
+                    logger.info(f"   📉 Вероятность просадки > 30%: {prob:.2f}%")
                 if result_dict.get('disabled_regimes'):
-                    print(colorize(f"   Disabled regimes: {result_dict['disabled_regimes']}", 'yellow'))
-                print(colorize(f"   Risk of ruin: {result_dict.get('risk_of_ruin', 0):.2f}%", 'cyan'))
+                    logger.info(colorize(f"   Disabled regimes: {result_dict['disabled_regimes']}", 'yellow'))
+                logger.info(colorize(f"   Risk of ruin: {result_dict.get('risk_of_ruin', 0):.2f}%", 'cyan'))
                 print_admission_report(result_dict.get('admission'))
             else:
-                print(f"✓ ({raw_result.total_trades} сделок)")
-                print(colorize(f"   Risk of ruin: {result_dict.get('risk_of_ruin', 0):.2f}%", 'cyan'))
+                logger.info(f"✓ ({raw_result.total_trades} сделок)")
+                logger.info(colorize(f"   Risk of ruin: {result_dict.get('risk_of_ruin', 0):.2f}%", 'cyan'))
                 if debug_filters:
                     print_filter_debug_stats(result_dict.get('filter_stats'))
 
@@ -827,22 +828,22 @@ def print_comparison_table(aggregated: dict[str, Any], use_robustness: bool = Fa
     """Сравнительная таблица лучших моделей по инструментам"""
     rows = aggregated.get('rows', [])
     if not rows:
-        print(colorize("\n❌ Нет валидных результатов для сравнения", 'red', bright=True))
+        logger.info(colorize("\n❌ Нет валидных результатов для сравнения", 'red', bright=True))
         return
 
-    print("\n" + colorize("=" * 120, 'magenta', bright=True))
-    print(colorize("СРАВНЕНИЕ ИНСТРУМЕНТОВ (ЛУЧШАЯ МОДЕЛЬ НА КАЖДЫЙ ИНСТРУМЕНТ)", 'magenta', bright=True))
-    print(colorize("=" * 120, 'magenta', bright=True))
+    logger.info("\n" + colorize("=" * 120, 'magenta', bright=True))
+    logger.info(colorize("СРАВНЕНИЕ ИНСТРУМЕНТОВ (ЛУЧШАЯ МОДЕЛЬ НА КАЖДЫЙ ИНСТРУМЕНТ)", 'magenta', bright=True))
+    logger.info(colorize("=" * 120, 'magenta', bright=True))
     score_label = 'Robust' if use_robustness else 'Score'
     header = (
         f"{'Symbol':<10} {'Best Model':<15} {'PF':>8} {'PF_test':>8} "
         f"{'DD%':>8} {'Stability':>10} {score_label:>10}"
     )
-    print(header)
-    print("-" * 120)
+    logger.info(header)
+    logger.info("-" * 120)
 
     for row in sorted(rows, key=lambda x: x['score'], reverse=True):
-        print(
+        logger.info(
             f"{row['symbol']:<10} "
             f"{row['best_model']:<15} "
             f"{row.get('pf_train', row['profit_factor']):>8.2f} "
@@ -851,33 +852,33 @@ def print_comparison_table(aggregated: dict[str, Any], use_robustness: bool = Fa
             f"{row.get('stability', 1.0):>10.2f} "
             f"{row['score']:>10.2f}"
         )
-    print(colorize("=" * 120, 'magenta', bright=True))
+    logger.info(colorize("=" * 120, 'magenta', bright=True))
 
     best_pf = aggregated['best_by_pf']
     best_maxdd = aggregated['best_by_maxdd']
     best_return = aggregated['best_by_return']
     best_score = aggregated['best_by_score']
 
-    print(colorize(f"\n🏆 Лучший по Profit Factor: {best_pf['symbol']} ({best_pf['profit_factor']:.2f})", 'green', bright=True))
-    print(colorize(f"🏆 Лучший по MaxDD:         {best_maxdd['symbol']} ({best_maxdd['max_drawdown_percent']:.2f}%)", 'green', bright=True))
-    print(colorize(f"🏆 Лучший по Stability:     {best_score['symbol']} ({best_score.get('stability', 1.0):.2f})", 'green', bright=True))
-    print(colorize(f"🏆 Лучший по Return:        {best_return['symbol']} ({best_return['return_pct']:.2f}%)", 'green', bright=True))
-    print(colorize(f"\n🏆 Лучший инструмент: {best_score['symbol']}", 'green', bright=True))
-    print(colorize(f"🏆 Лучшая модель: {best_score['best_model']}", 'green', bright=True))
-    print(colorize(f"Score: {best_score['score']:.2f}", 'green', bright=True))
+    logger.info(colorize(f"\n🏆 Лучший по Profit Factor: {best_pf['symbol']} ({best_pf['profit_factor']:.2f})", 'green', bright=True))
+    logger.info(colorize(f"🏆 Лучший по MaxDD:         {best_maxdd['symbol']} ({best_maxdd['max_drawdown_percent']:.2f}%)", 'green', bright=True))
+    logger.info(colorize(f"🏆 Лучший по Stability:     {best_score['symbol']} ({best_score.get('stability', 1.0):.2f})", 'green', bright=True))
+    logger.info(colorize(f"🏆 Лучший по Return:        {best_return['symbol']} ({best_return['return_pct']:.2f}%)", 'green', bright=True))
+    logger.info(colorize(f"\n🏆 Лучший инструмент: {best_score['symbol']}", 'green', bright=True))
+    logger.info(colorize(f"🏆 Лучшая модель: {best_score['best_model']}", 'green', bright=True))
+    logger.info(colorize(f"Score: {best_score['score']:.2f}", 'green', bright=True))
 
 
 def run_optimization(df, deposit, ticker, signal_kwargs: dict | None = None, debug_filters: bool = False):
     """Запуск оптимизации - сравнение всех моделей"""
     print_separator(color='cyan')
-    print(colorize(f"🔄 ОПТИМИЗАЦИЯ МОДЕЛЕЙ ДЛЯ {ticker}", 'cyan', bright=True))
+    logger.info(colorize(f"🔄 ОПТИМИЗАЦИЯ МОДЕЛЕЙ ДЛЯ {ticker}", 'cyan', bright=True))
     print_separator(color='cyan')
-    print("\nЗапуск бэктеста для всех моделей...\n")
+    logger.info("\nЗапуск бэктеста для всех моделей...\n")
 
     results = []
 
     for model_name in MODELS.keys():
-        print(f"  Тестирование модели: {model_name}...", end=' ')
+        logger.info(f"  Тестирование модели: {model_name}...")
         model = get_model(model_name)
 
         backtest_result = run_backtest(
@@ -892,17 +893,17 @@ def run_optimization(df, deposit, ticker, signal_kwargs: dict | None = None, deb
         )
 
         results.append(backtest_result)
-        print(f"✓ ({backtest_result.total_trades} сделок)")
+        logger.info(f"✓ ({backtest_result.total_trades} сделок)")
         if debug_filters:
             print_filter_debug_stats(backtest_result.to_dict().get('filter_stats'))
 
     # Вывод сравнительной таблицы
-    print("\n" + compare_models_results(results))
+    logger.info("\n" + compare_models_results(results))
 
     # Детальные результаты по каждой модели
-    print("\n" + colorize("="*80, 'magenta', bright=True))
-    print(colorize("ДЕТАЛЬНЫЕ РЕЗУЛЬТАТЫ ПО МОДЕЛЯМ", 'magenta', bright=True))
-    print(colorize("="*80, 'magenta', bright=True) + "\n")
+    logger.info("\n" + colorize("="*80, 'magenta', bright=True))
+    logger.info(colorize("ДЕТАЛЬНЫЕ РЕЗУЛЬТАТЫ ПО МОДЕЛЯМ", 'magenta', bright=True))
+    logger.info(colorize("="*80, 'magenta', bright=True) + "\n")
 
     for result in sorted(results, key=lambda x: x.expectancy, reverse=True):
         if result.total_trades > 0:
@@ -1020,56 +1021,56 @@ def run_grid_search_for_symbol(
 def print_grid_search_heatmap(grid_result: dict[str, Any], walk_forward: bool):
     """Текстовый heatmap лучших зон устойчивости."""
     if grid_result.get('error'):
-        print(colorize(f"\n❌ Grid search: {grid_result['error']}", 'red', bright=True))
+        logger.info(colorize(f"\n❌ Grid search: {grid_result['error']}", 'red', bright=True))
         return
 
     entries = grid_result.get('entries', [])
     top_zone = grid_result.get('top_zone', [])
     if not entries:
-        print(colorize("\n❌ Grid search не дал результатов", 'red', bright=True))
+        logger.info(colorize("\n❌ Grid search не дал результатов", 'red', bright=True))
         return
 
     score_label = 'RobustScore' if walk_forward else 'Score'
 
-    print("\n" + colorize("=" * 100, 'magenta', bright=True))
-    print(colorize(f"GRID SEARCH HEATMAP ({grid_result['symbol']}) - лучшие зоны устойчивости", 'magenta', bright=True))
-    print(colorize("=" * 100, 'magenta', bright=True))
-    print(f"Top-zone size: {len(top_zone)}/{len(entries)}")
+    logger.info("\n" + colorize("=" * 100, 'magenta', bright=True))
+    logger.info(colorize(f"GRID SEARCH HEATMAP ({grid_result['symbol']}) - лучшие зоны устойчивости", 'magenta', bright=True))
+    logger.info(colorize("=" * 100, 'magenta', bright=True))
+    logger.info(f"Top-zone size: {len(top_zone)}/{len(entries)}")
 
-    print(f"\nЛучшие комбинации ({score_label}):")
-    print(f"{'RR':>6} {'Vol':>6} {'ATR':>6} {score_label:>12}")
-    print("-" * 40)
+    logger.info(f"\nЛучшие комбинации ({score_label}):")
+    logger.info(f"{'RR':>6} {'Vol':>6} {'ATR':>6} {score_label:>12}")
+    logger.info("-" * 40)
     for row in top_zone[:15]:
-        print(f"{row['rr']:>6.2f} {row['volume']:>6.2f} {row['atr']:>6.2f} {row['score']:>12.2f}")
+        logger.info(f"{row['rr']:>6.2f} {row['volume']:>6.2f} {row['atr']:>6.2f} {row['score']:>12.2f}")
 
     rr_values = sorted({x['rr'] for x in entries})
     vol_values = sorted({x['volume'] for x in entries})
     atr_values = sorted({x['atr'] for x in entries})
 
-    print("\nHeatmap RR x Volume (mean score by ATR):")
+    logger.info("\nHeatmap RR x Volume (mean score by ATR):")
     header = "RR\\Vol  " + " ".join(f"{v:>7.2f}" for v in vol_values)
-    print(header)
-    print("-" * len(header))
+    logger.info(header)
+    logger.info("-" * len(header))
     for rr in rr_values:
         row = [f"{rr:>6.2f}"]
         for vol in vol_values:
             values = [x['score'] for x in entries if x['rr'] == rr and x['volume'] == vol]
             cell = sum(values) / len(values) if values else 0
             row.append(f"{cell:>7.2f}")
-        print(" ".join(row))
+        logger.info(" ".join(row))
 
-    print("\nHeatmap RR x ATR (mean score by Volume):")
+    logger.info("\nHeatmap RR x ATR (mean score by Volume):")
     header = "RR\\ATR  " + " ".join(f"{a:>7.2f}" for a in atr_values)
-    print(header)
-    print("-" * len(header))
+    logger.info(header)
+    logger.info("-" * len(header))
     for rr in rr_values:
         row = [f"{rr:>6.2f}"]
         for atr in atr_values:
             values = [x['score'] for x in entries if x['rr'] == rr and x['atr'] == atr]
             cell = sum(values) / len(values) if values else 0
             row.append(f"{cell:>7.2f}")
-        print(" ".join(row))
-    print(colorize("=" * 100, 'magenta', bright=True))
+        logger.info(" ".join(row))
+    logger.info(colorize("=" * 100, 'magenta', bright=True))
 
 
 def main():
@@ -1197,7 +1198,7 @@ def main():
     if args.monte_carlo < 0:
         parser.error("--monte-carlo must be >= 0")
     if args.walk_forward and 0 < args.monte_carlo < 1000 and not args.json:
-        print(colorize("⚠ Для устойчивой оценки рекомендуется --monte-carlo >= 1000", 'yellow', bright=True))
+        logger.info(colorize("⚠ Для устойчивой оценки рекомендуется --monte-carlo >= 1000", 'yellow', bright=True))
     if args.limit is not None and args.limit <= 0:
         parser.error("--limit must be > 0")
     if args.regime_pf_window <= 0:
@@ -1216,16 +1217,16 @@ def main():
     # Список моделей
     if args.list_models:
         print_separator()
-        print("ДОСТУПНЫЕ ТОРГОВЫЕ МОДЕЛИ")
+        logger.info("ДОСТУПНЫЕ ТОРГОВЫЕ МОДЕЛИ")
         print_separator()
         for name, model in MODELS.items():
-            print(f"\n{name:15} - {model.description}")
+            logger.info(f"\n{name:15} - {model.description}")
         print_separator()
         return
 
     # Сравнение моделей
     if args.compare_models:
-        print(compare_models())
+        logger.info(compare_models())
         return
 
     if not args.deposit and not args.generate_setups and not args.monitor:
@@ -1234,7 +1235,7 @@ def main():
         try:
             get_model(args.model)
         except ValueError as e:
-            print(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
+            logger.info(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
             return
 
     symbols = parse_symbols(args.symbols)
@@ -1342,11 +1343,11 @@ def main():
 
         setups_from_file = load_setups_json(args.export_json)
         if not setups_from_file:
-            print(colorize(f"❌ В файле {args.export_json} нет активных сетапов", 'red', bright=True))
+            logger.info(colorize(f"❌ В файле {args.export_json} нет активных сетапов", 'red', bright=True))
             return
 
         if not args.json:
-            print(colorize(f"🔎 Загружено сетапов из {args.export_json}: {len(setups_from_file)}", 'cyan', bright=True))
+            logger.info(colorize(f"🔎 Загружено сетапов из {args.export_json}: {len(setups_from_file)}", 'cyan', bright=True))
 
         remaining = _monitor_setups(
             exchange=args.exchange,
@@ -1361,7 +1362,7 @@ def main():
             monitor_workers=args.monitor_workers,
         )
         if args.json:
-            print(json.dumps({"remaining_setups": remaining}, ensure_ascii=False, indent=2))
+            logger.info(json.dumps({"remaining_setups": remaining}, ensure_ascii=False, indent=2))
         return
 
     if args.generate_setups:
@@ -1372,7 +1373,7 @@ def main():
         try:
             model = get_model(args.model)
         except ValueError as e:
-            print(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
+            logger.info(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
             return
 
         generated_setups: list[TradeSetup] = []
@@ -1438,10 +1439,10 @@ def main():
         if args.export_json:
             export_setups_json(args.export_json, setup_dicts)
             if not args.json:
-                print(colorize(f"💾 Сетапы сохранены: {args.export_json}", 'cyan', bright=True))
+                logger.info(colorize(f"💾 Сетапы сохранены: {args.export_json}", 'cyan', bright=True))
 
         if args.json:
-            print(
+            logger.info(
                 json.dumps(
                     {
                         "setups": setup_dicts,
@@ -1457,20 +1458,20 @@ def main():
                 for setup in setup_dicts:
                     print_setup_detected(setup)
             else:
-                print(colorize("⚠ Валидные сетапы не найдены", 'yellow', bright=True))
+                logger.info(colorize("⚠ Валидные сетапы не найдены", 'yellow', bright=True))
 
             if rejected:
-                print(colorize("\nПричины отклонения:", 'yellow', bright=True))
+                logger.info(colorize("\nПричины отклонения:", 'yellow', bright=True))
                 for symbol, reasons in rejected.items():
-                    print(colorize(f"  {symbol}:", 'yellow', bright=True))
+                    logger.info(colorize(f"  {symbol}:", 'yellow', bright=True))
                     for reason in reasons:
-                        print(colorize(f"    - {reason}", 'yellow'))
+                        logger.info(colorize(f"    - {reason}", 'yellow'))
 
             if data_warnings:
-                print(colorize("\nПредупреждения по данным:", 'yellow', bright=True))
+                logger.info(colorize("\nПредупреждения по данным:", 'yellow', bright=True))
                 for symbol, warnings in data_warnings.items():
                     for warning in warnings:
-                        print(colorize(f"  {symbol}: {warning}", 'yellow'))
+                        logger.info(colorize(f"  {symbol}: {warning}", 'yellow'))
 
         if args.monitor and setup_dicts:
             _monitor_setups(
@@ -1488,14 +1489,14 @@ def main():
         return
 
     if not args.json and (args.disable_rr or effective_disable_volume or effective_disable_trend):
-        print(colorize("⚙️  Отключенные фильтры:", 'yellow', bright=True))
+        logger.info(colorize("⚙️  Отключенные фильтры:", 'yellow', bright=True))
         if args.disable_rr:
-            print("   • RR")
+            logger.info("   • RR")
         if effective_disable_volume:
-            print("   • Volume")
+            logger.info("   • Volume")
         if effective_disable_trend:
-            print("   • Trend")
-        print()
+            logger.info("   • Trend")
+        logger.info()
 
     # Оптимизация по нескольким инструментам
     if symbols:
@@ -1535,12 +1536,12 @@ def main():
                 if args.walk_forward:
                     print_walk_forward_table(symbol_result['models'])
                 else:
-                    print("\n" + compare_models_results(symbol_result['results']))
+                    logger.info("\n" + compare_models_results(symbol_result['results']))
 
         aggregated = aggregate_results(results)
 
         if args.json:
-            print(
+            logger.info(
                 json.dumps(
                     {
                         'results': results,
@@ -1556,12 +1557,12 @@ def main():
             if args.walk_forward:
                 print_cross_instrument_stability(results)
             if errors:
-                print(colorize("\n⚠️  Символы с ошибками:", 'yellow', bright=True))
+                logger.info(colorize("\n⚠️  Символы с ошибками:", 'yellow', bright=True))
                 for symbol, error in errors.items():
-                    print(colorize(f"   {symbol}: {error}", 'yellow'))
+                    logger.info(colorize(f"   {symbol}: {error}", 'yellow'))
 
             if args.grid_search and results:
-                print("\nЗапуск grid-search по каждому инструменту...")
+                logger.info("\nЗапуск grid-search по каждому инструменту...")
                 for symbol in results.keys():
                     grid_result = run_grid_search_for_symbol(
                         exchange=args.exchange,
@@ -1613,7 +1614,7 @@ def main():
 
         if args.json:
             single_results = {args.ticker: symbol_result['models']}
-            print(
+            logger.info(
                 json.dumps(
                     {
                         'results': single_results,
@@ -1627,10 +1628,10 @@ def main():
             if args.walk_forward:
                 print_walk_forward_table(symbol_result['models'])
             else:
-                print("\n" + compare_models_results(symbol_result['results']))
-                print("\n" + colorize("=" * 80, 'magenta', bright=True))
-                print(colorize("ДЕТАЛЬНЫЕ РЕЗУЛЬТАТЫ ПО МОДЕЛЯМ", 'magenta', bright=True))
-                print(colorize("=" * 80, 'magenta', bright=True) + "\n")
+                logger.info("\n" + compare_models_results(symbol_result['results']))
+                logger.info("\n" + colorize("=" * 80, 'magenta', bright=True))
+                logger.info(colorize("ДЕТАЛЬНЫЕ РЕЗУЛЬТАТЫ ПО МОДЕЛЯМ", 'magenta', bright=True))
+                logger.info(colorize("=" * 80, 'magenta', bright=True) + "\n")
                 for result in sorted(symbol_result['results'], key=lambda x: x.expectancy, reverse=True):
                     if result.total_trades > 0:
                         print_backtest_report(result.to_dict(), show_details=False)
@@ -1660,16 +1661,16 @@ def main():
     try:
         model = get_model(args.model)
     except ValueError as e:
-        print(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
+        logger.info(colorize(f"❌ Ошибка: {e}", 'red', bright=True))
         return
     model = apply_filters_to_model(model, filter_config)
 
     # Загружаем данные
     if not args.json:
         print_separator(color='cyan')
-        print(colorize(f"📥 Загрузка данных для {args.ticker}", 'cyan', bright=True))
-        print(f"   Таймфрейм: {args.timeframe}")
-        print(f"   Движок: {args.engine}, Рынок: {args.market}, Режим: {board}")
+        logger.info(colorize(f"📥 Загрузка данных для {args.ticker}", 'cyan', bright=True))
+        logger.info(f"   Таймфрейм: {args.timeframe}")
+        logger.info(f"   Движок: {args.engine}, Рынок: {args.market}, Режим: {board}")
         print_separator(color='cyan')
 
     try:
@@ -1684,21 +1685,21 @@ def main():
             limit=args.limit
         )
     except Exception as exc:
-        print(colorize(f"\n❌ Ошибка загрузки данных: {exc}", 'red', bright=True))
+        logger.info(colorize(f"\n❌ Ошибка загрузки данных: {exc}", 'red', bright=True))
         return
     df = data_result.df
 
     if df.empty:
-        print(colorize(f"\n❌ Нет данных для {args.ticker}", 'red', bright=True))
+        logger.info(colorize(f"\n❌ Нет данных для {args.ticker}", 'red', bright=True))
         return
 
     if not args.json:
-        print(colorize(f"✅ Загружено {len(df)} свечей", 'green', bright=True))
-        print(f"   Период: {df.index[0]} - {df.index[-1]}\n")
+        logger.info(colorize(f"✅ Загружено {len(df)} свечей", 'green', bright=True))
+        logger.info(f"   Период: {df.index[0]} - {df.index[-1]}\n")
         for warning in data_result.warnings:
-            print(warning)
+            logger.info(warning)
         if data_result.warnings:
-            print()
+            logger.info()
 
     # Показываем информацию о модели
     if not args.json and not args.no_signal:
@@ -1763,7 +1764,7 @@ def main():
     eval_stats = None
     if args.backtest:
         if not args.json:
-            print(colorize("🔄 Запуск бэктеста...\n", 'cyan', bright=True))
+            logger.info(colorize("🔄 Запуск бэктеста...\n", 'cyan', bright=True))
 
         eval_stats, raw_eval = evaluate_model(
             df=df,
@@ -1800,7 +1801,7 @@ def main():
             output['disabled_regimes'] = eval_stats.get('disabled_regimes', {})
             output['admission'] = eval_stats.get('admission', {})
             output['edge_found'] = eval_stats.get('edge_found', False)
-        print(json.dumps(output, indent=2, ensure_ascii=False))
+        logger.info(json.dumps(output, indent=2, ensure_ascii=False))
     else:
         if signal:
             print_signal_report(
@@ -1815,29 +1816,29 @@ def main():
                 print_filter_debug_stats(backtest_dict.get('filter_stats'))
         if walk_forward_result:
             wf = walk_forward_result.to_dict()
-            print(colorize("\nWalk-Forward Summary:", 'magenta', bright=True))
-            print(
+            logger.info(colorize("\nWalk-Forward Summary:", 'magenta', bright=True))
+            logger.info(
                 f"Train PF: {wf['train']['profit_factor']:.2f}, "
                 f"Test PF: {wf['test']['profit_factor']:.2f}, "
                 f"Stability Ratio: {wf['robustness']['stability_ratio']:.2f}, "
                 f"RobustScore: {wf['robustness']['robustness_score']:.2f}"
             )
             if wf['robustness']['stability_ratio'] < 0.7:
-                print(colorize("⚠️  unstable (Stability ratio < 0.7)", 'yellow'))
+                logger.info(colorize("⚠️  unstable (Stability ratio < 0.7)", 'yellow'))
             if wf['robustness']['unstable_oos']:
-                print(colorize("⚠️  Out-of-sample unstable", 'yellow'))
+                logger.info(colorize("⚠️  Out-of-sample unstable", 'yellow'))
             if wf['robustness']['overfit']:
-                print(colorize("⚠️  Overfitting detected", 'yellow'))
+                logger.info(colorize("⚠️  Overfitting detected", 'yellow'))
             if wf.get('monte_carlo'):
                 mc = wf['monte_carlo']
-                print(
+                logger.info(
                     f"MonteCarlo: worst DD {mc['worst_drawdown_percent']:.2f}%, "
                     f"q5 equity {mc['quantile_5_equity']:.2f}, "
                     f"stability {mc['stability_score']:.4f}"
                 )
-                print(f"📉 Вероятность просадки > 30%: {mc.get('probability_drawdown_over_30', 0):.2f}%")
+                logger.info(f"📉 Вероятность просадки > 30%: {mc.get('probability_drawdown_over_30', 0):.2f}%")
             if eval_stats:
-                print(colorize(f"Risk of ruin: {eval_stats.get('risk_of_ruin', 0):.2f}%", 'cyan'))
+                logger.info(colorize(f"Risk of ruin: {eval_stats.get('risk_of_ruin', 0):.2f}%", 'cyan'))
                 print_admission_report(eval_stats.get('admission'))
 
         if eval_stats and eval_stats.get('market_regime_performance'):
@@ -1856,7 +1857,7 @@ def main():
                     disabled_regimes=eval_stats.get('disabled_regimes'),
                 )
             else:
-                print(colorize("\nℹ Regime performance summary недоступен: в бэктесте нет сделок.", 'yellow', bright=True))
+                logger.info(colorize("\nℹ Regime performance summary недоступен: в бэктесте нет сделок.", 'yellow', bright=True))
             print_edge_recommendations(eval_stats.get('admission'))
 
 
