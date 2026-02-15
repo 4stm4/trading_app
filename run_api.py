@@ -3,7 +3,7 @@
 Запуск REST API торговой системы
 """
 
-from api import create_app
+from ports.api import create_app
 
 if __name__ == '__main__':
     app = create_app()

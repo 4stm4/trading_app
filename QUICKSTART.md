@@ -12,23 +12,29 @@ source venv/bin/activate
 
 ```bash
 # Анализ акции
-python -m adapters.moex.trading_cli SBER --deposit 100000
+python -m ports.cli.trading_cli SBER --deposit 100000
 
 # С выбором модели
-python -m adapters.moex.trading_cli SBER -d 100000 --model conservative
+python -m ports.cli.trading_cli SBER -d 100000 --model conservative
 
 # Фьючерсы
-python -m adapters.moex.trading_cli CCH6 -d 100000 -e futures -m forts
+python -m ports.cli.trading_cli CCH6 -d 100000 -e futures -m forts
 
 # С бэктестом
-python -m adapters.moex.trading_cli SBER -d 100000 --backtest
+python -m ports.cli.trading_cli SBER -d 100000 --backtest
 
 # Оптимизация (сравнить все модели)
-python -m adapters.moex.trading_cli SBER -d 100000 --optimize
+python -m ports.cli.trading_cli SBER -d 100000 --optimize
 
 # Список моделей
-python -m adapters.moex.trading_cli --list-models
+python -m ports.cli.trading_cli --list-models
 ```
+
+### Конфиг стратегии
+
+- По умолчанию CLI использует `strict.yaml` из корня проекта (если файл существует).
+- Явный выбор файла: `python -m ports.cli.trading_cli SBER -d 100000 --config strict.yaml`.
+- Если `strict.yaml` отсутствует, используются встроенные безопасные fallback defaults.
 
 ## 2️⃣ REST API
 
@@ -77,7 +83,7 @@ curl -X POST http://localhost:5000/api/backtest \
 ### Python клиент
 
 ```python
-from api.client import TradingSystemClient
+from ports.api.client import TradingSystemClient
 
 client = TradingSystemClient()
 
@@ -135,22 +141,22 @@ print(f"RR: {signal.rr}")
 
 ### Консервативная торговля
 ```bash
-python -m adapters.moex.trading_cli SBER -d 500000 --model conservative --backtest
+python -m ports.cli.trading_cli SBER -d 500000 --model conservative --backtest
 ```
 
 ### Агрессивный скальпинг
 ```bash
-python -m adapters.moex.trading_cli GAZP -d 100000 --model scalp -t 5m
+python -m ports.cli.trading_cli GAZP -d 100000 --model scalp -t 5m
 ```
 
 ### Найти лучшую модель
 ```bash
-python -m adapters.moex.trading_cli LKOH -d 300000 --optimize
+python -m ports.cli.trading_cli LKOH -d 300000 --optimize
 ```
 
 ### API оптимизация
 ```python
-from api.client import TradingSystemClient
+from ports.api.client import TradingSystemClient
 
 client = TradingSystemClient()
 result = client.optimize('SBER', 100000, timeframe='1h')
@@ -169,16 +175,16 @@ print(f"\n🏆 Лучшая: {result['best_model']['name']}")
 
 ```bash
 # CLI помощь
-python -m adapters.moex.trading_cli --help
+python -m ports.cli.trading_cli --help
 
 # Список моделей
-python -m adapters.moex.trading_cli --list-models
+python -m ports.cli.trading_cli --list-models
 
 # Сравнение моделей
-python -m adapters.moex.trading_cli --compare-models
+python -m ports.cli.trading_cli --compare-models
 
 # API примеры
-python api/client.py
+python -m ports.api.client
 ```
 
 ---

@@ -317,8 +317,8 @@ from services.strategy_engine import (
     run_backtest
 )
 
-# Теперь можно использовать:
-# from adapters.moex import generate_signal, get_model
+# Используйте напрямую из strategy_engine:
+# from services.strategy_engine import generate_signal, get_model
 ```
 
 ### Пример для Binance (будущее)

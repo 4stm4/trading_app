@@ -569,7 +569,7 @@ except Exception as e:
 ```bash
 pip install gunicorn
 
-gunicorn -w 4 -b 0.0.0.0:5000 api.app:create_app()
+gunicorn -w 4 -b 0.0.0.0:5000 ports.api.app:create_app()
 ```
 
 ### Docker (пример)
@@ -584,7 +584,7 @@ RUN pip install -r requirements.txt
 COPY . .
 
 EXPOSE 5000
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "api.app:create_app()"]
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "ports.api.app:create_app()"]
 ```
 
 ---

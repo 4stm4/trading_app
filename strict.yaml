@@ -1,0 +1,82 @@
+filters:
+
+  volume:
+    enabled: true
+    mode: adaptive
+    min_ratio: 1.15          # было 1.1 — слишком много шума
+    high_vol_ratio: 1.6      # было 1.8 — слишком мало сигналов high-vol
+
+  trend:
+    enabled: true
+    min_strength_pct: 3.0
+    require_ma_alignment: true
+    allow_range: false
+
+  pullback:
+    enabled: true
+    max_ma50_distance_pct: 1.0 
+    require_pullback: true
+
+  rsi:
+    enabled: true
+    overbought: 65
+    oversold: 35
+    trend_confirmation_only: true
+
+  atr:
+    enabled: true
+    stop_multiplier: 1.0
+    min_percentile: 20           # было 18 — убираем low-vol noise
+
+  risk:
+    risk_per_trade_pct: 1.0
+    max_daily_loss_pct: 1.0
+    equity_dd_stop_pct: 10.0
+
+    partial_take_profit: false
+    partial_tp_rr: 1.0           # оставить для валидатора
+    partial_close_fraction: 0.5  # не используется если partial_take_profit=false
+    trail_after_partial: false
+    trailing_atr_multiplier: 1.0
+
+  rr:
+    min_rr: 3
+
+  regime:
+    enabled: true
+    trade_trend: true
+    trade_range: false           # range regime убыточен (PF 0.76)
+    trade_high_vol: true
+
+    min_regime_pf: 1.15          # было 1.2 — слишком строгий фильтр
+    high_vol_pf_threshold: 1.10
+    trend_pf_threshold: 1.10
+    range_pf_threshold: 999.0
+
+  costs:
+    enabled: true
+    futures_per_contract_rub: 2.02
+    futures_fee_mode: round_trip
+    securities_bps: 4.9
+    settlement_bps: 2.0
+    slippage_bps: 0.0
+
+  scoring:
+    conservative_v2_enabled: true
+    conservative_min_score: 0.68     # было 0.65 — повышаем качество входов
+    max_threshold_relaxation: 0.15   # было 0.20 — меньше мусорных сигналов
+
+    atr_relaxation_bonus: 0.10       # high-vol regime — основной источник прибыли
+    trend_relaxation_bonus: 0.05
+    range_relaxation_bonus: 0.00     # range отключён
+
+    min_expected_trades_per_month: 25.0  # было 35 — realistic для trend system
+
+    weights:
+      trend_alignment: 0.30
+      trend_strength: 0.25
+      pullback: 0.25
+      volume: 0.15
+      rsi: 0.05
+      ma_distance: 0.0
+      structure: 0.0

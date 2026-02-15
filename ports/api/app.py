@@ -5,6 +5,7 @@ Flask API для торговой системы
 from flask import Flask, jsonify, request
 from flask.views import MethodView
 import logging
+from typing import Any
 
 from services.strategy_engine import (
     MODELS,
@@ -14,10 +15,36 @@ from services.strategy_engine import (
     compare_models_results
 )
 from adapters.moex import load_data_with_indicators
-from adapters.moex.moex import MOEXAdapter
+from adapters.moex.iss_client import MOEXAdapter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def _resolve_contract_risk_params(adapter: Any, ticker: str, board: str) -> dict[str, float]:
+    """Возвращает параметры фьючерсного контракта для риск-расчёта."""
+    getter = getattr(adapter, "get_security_spec", None)
+    if not callable(getter):
+        return {}
+    try:
+        spec = getter(ticker, board=board) or {}
+    except Exception:
+        return {}
+
+    result: dict[str, float] = {}
+    try:
+        margin = float(spec.get("initial_margin"))
+        if margin > 0:
+            result["contract_margin_rub"] = margin
+    except (TypeError, ValueError):
+        pass
+    try:
+        mult = float(spec.get("contract_multiplier"))
+        if mult > 0:
+            result["contract_multiplier"] = mult
+    except (TypeError, ValueError):
+        pass
+    return result
 
 
 def create_app():
@@ -136,7 +163,8 @@ class SignalView(MethodView):
                 return jsonify({'error': f'No data for {ticker}'}), 404
 
             # Генерируем сигнал
-            signal = generate_signal(df, deposit, model)
+            risk_params = _resolve_contract_risk_params(adapter, ticker, board)
+            signal = generate_signal(df, deposit, model, **risk_params)
 
             return jsonify({
                 'ticker': ticker,
@@ -208,12 +236,16 @@ class BacktestView(MethodView):
             if df.empty:
                 return jsonify({'error': f'No data for {ticker}'}), 404
 
+            risk_params = _resolve_contract_risk_params(adapter, ticker, board)
+            risk_params["sl_tp_only"] = True
+
             # Запускаем бэктест
             results = run_backtest(
                 df=df,
                 signal_generator=generate_signal,
                 deposit=deposit,
-                model=model
+                model=model,
+                signal_kwargs=risk_params or None,
             )
 
             return jsonify({
@@ -281,6 +313,9 @@ class OptimizeView(MethodView):
             if df.empty:
                 return jsonify({'error': f'No data for {ticker}'}), 404
 
+            risk_params = _resolve_contract_risk_params(adapter, ticker, board)
+            risk_params["sl_tp_only"] = True
+
             # Запускаем бэктест для всех моделей
             results = []
             for model_name in MODELS.keys():
@@ -289,7 +324,8 @@ class OptimizeView(MethodView):
                     df=df,
                     signal_generator=generate_signal,
                     deposit=deposit,
-                    model=model
+                    model=model,
+                    signal_kwargs=risk_params or None,
                 )
                 results.append(backtest_result)
 

@@ -1,5 +1,6 @@
 # Core runtime dependencies
 binance-connector
+colorama
 dash
 dash-bootstrap-components
 Flask
@@ -8,6 +9,8 @@ Flask-SQLAlchemy
 pandas
 pydantic
 pydantic-settings
+pyjobkit
+PyYAML
 requests
 websockets
 

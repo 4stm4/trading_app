@@ -4,6 +4,7 @@
 
 from typing import Dict, Optional
 from dataclasses import dataclass
+import math
 
 
 @dataclass
@@ -25,7 +26,12 @@ def calculate_position_risk(
     target: float,
     deposit: float,
     max_risk_percent: float = 1.5,
-    min_rr: float = 2.0
+    min_rr: float = 2.0,
+    max_position_notional_pct: float = 100.0,
+    position_step: float = 1.0,
+    contract_margin_rub: Optional[float] = None,
+    contract_multiplier: float = 1.0,
+    futures_margin_safety_factor: float = 1.0,
 ) -> RiskParameters:
     """
     Расчет риск-менеджмента для позиции
@@ -37,12 +43,18 @@ def calculate_position_risk(
         deposit: Размер депозита
         max_risk_percent: Максимальный риск в % от депозита
         min_rr: Минимальный RR
+        max_position_notional_pct: Максимальная доля портфеля под номинал позиции
+        position_step: Шаг позиции (1.0 = целые контракты/штуки, 0.0 = без округления)
+        contract_margin_rub: ГО на 1 контракт (если задано, ограничивает размер позиции)
+        contract_multiplier: Денежная стоимость изменения цены на 1.0 (руб/пункт)
+        futures_margin_safety_factor: Множитель запаса для ГО
 
     Returns:
         RiskParameters с результатами расчета
     """
-    risk_per_unit = abs(entry - stop)
-    profit_per_unit = abs(target - entry)
+    effective_multiplier = contract_multiplier if contract_multiplier > 0 else 1.0
+    risk_per_unit = abs(entry - stop) * effective_multiplier
+    profit_per_unit = abs(target - entry) * effective_multiplier
 
     # Проверка на нулевое расстояние
     if risk_per_unit == 0:
@@ -75,9 +87,30 @@ def calculate_position_risk(
 
     # Расчет максимального риска
     max_risk_rub = deposit * (max_risk_percent / 100)
+    max_position_notional = deposit * (max_position_notional_pct / 100)
+    position_by_notional = max_position_notional / entry if entry > 0 else 0.0
+    position_by_margin = float("inf")
+    if contract_margin_rub is not None and contract_margin_rub > 0:
+        effective_margin = contract_margin_rub * max(futures_margin_safety_factor, 1e-9)
+        position_by_margin = max_position_notional / effective_margin
 
     # Расчет размера позиции
-    position_size = max_risk_rub / risk_per_unit
+    position_size = min(max_risk_rub / risk_per_unit, position_by_notional, position_by_margin)
+
+    if position_step > 0:
+        position_size = math.floor(position_size / position_step) * position_step
+
+    if position_size <= 0:
+        return RiskParameters(
+            valid=False,
+            rr=rr,
+            risk_rub=0,
+            risk_percent=0,
+            position_size=0,
+            potential_profit=0,
+            potential_loss=0,
+            reason='Размер позиции <= 0 после ограничений портфеля/шага'
+        )
 
     # Фактический риск и профит
     actual_risk_rub = position_size * risk_per_unit

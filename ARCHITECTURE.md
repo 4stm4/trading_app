@@ -71,9 +71,10 @@ signal.rr         # Risk/Reward
 
 ```
 adapters/moex/
-├── moex.py          # API клиент MOEX
-├── indicators.py    # Расчет MA, RSI
-├── trading_cli.py   # CLI интерфейс
+├── iss_client.py          # API клиент MOEX ISS
+├── indicator_dataset.py   # OHLCV + индикаторы (MA/RSI/ATR)
+├── cli_dataset_loader.py  # Подготовка датасета для CLI
+├── setup_monitor.py       # Мониторинг активных сетапов
 └── README.md        # Документация
 ```
 
@@ -86,9 +87,12 @@ adapters/moex/
 
 ```
 adapters/binance/
-├── binance.py       # API клиент Binance
-├── indicators.py    # Расчет индикаторов
-└── trading_cli.py   # CLI интерфейс
+├── client.py                # API клиент Binance
+└── indicator_dataset.py     # OHLCV + индикаторы
+
+ports/cli
+└── trading_cli.py           # Универсальный CLI для всех бирж
+
 ```
 
 **Будет использовать:**
@@ -176,9 +180,9 @@ class NewExchangeAdapter:
         return df  # OHLCV DataFrame
 ```
 
-2. Добавить индикаторы:
+2. Добавить подготовку датасета с индикаторами:
 ```python
-# adapters/new_exchange/indicators.py
+# adapters/new_exchange/indicator_dataset.py
 from services.strategy_engine import calculate_atr
 
 def add_indicators(df):
@@ -304,12 +308,17 @@ services/strategy_engine/  # ← Вся логика здесь!
 └── backtest.py
 
 adapters/moex/            # Только API и данные
-├── moex.py
-└── indicators.py
+├── iss_client.py
+├── indicator_dataset.py
+├── cli_dataset_loader.py
+└── setup_monitor.py
 
 adapters/binance/         # Только API и данные
-├── binance.py
-└── indicators.py
+├── client.py
+└── indicator_dataset.py
+
+ports/cli/                # Общий вход пользователя в систему
+└── trading_cli.py
 ```
 ✅ Нет дублирования
 ✅ Легко поддерживать
@@ -325,7 +334,7 @@ adapters/binance/         # Только API и данные
 
 ```bash
 # 1. Использование готовой системы
-python -m adapters.moex.trading_cli SBER -d 100000 --model conservative
+python -m ports.cli.trading_cli SBER -d 100000 --model conservative
 
 # 2. Программное использование
 python
