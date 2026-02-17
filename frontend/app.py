@@ -10,7 +10,11 @@ import pandas as pd
 import requests
 from datetime import datetime
 
-from adapters.moex import load_data_with_indicators, MOEXAdapter
+from adapters import (
+    build_exchange_adapter,
+    load_data_with_indicators_for_exchange,
+    resolve_default_board,
+)
 from services.strategy_engine import get_model, generate_signal, MODELS
 
 # Инициализация приложения
@@ -398,22 +402,24 @@ def update_signal(n_clicks, ticker, timeframe, deposit, model_name, market_type)
         from datetime import datetime, timedelta
 
         # Загружаем данные
+        exchange = 'moex'
         engine = 'futures' if market_type == 'futures' else 'stock'
         market = 'forts' if market_type == 'futures' else 'shares'
-        board = 'RFUD' if market_type == 'futures' else 'TQBR'
+        board = resolve_default_board(exchange, engine)
 
         # Определяем период данных
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
 
-        adapter = MOEXAdapter(engine=engine, market=market)
-        df, _ = load_data_with_indicators(
+        adapter = build_exchange_adapter(exchange, engine, market)
+        df, _ = load_data_with_indicators_for_exchange(
+            exchange=exchange,
             ticker=ticker,
             timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
             board=board,
             adapter=adapter,
-            start_date=start_date,
-            end_date=end_date
         )
 
         if df.empty:
@@ -542,22 +548,24 @@ def update_backtest(n_clicks, ticker, timeframe, deposit, model_name, market_typ
         from services.strategy_engine import run_backtest
 
         # Загружаем данные
+        exchange = 'moex'
         engine = 'futures' if market_type == 'futures' else 'stock'
         market = 'forts' if market_type == 'futures' else 'shares'
-        board = 'RFUD' if market_type == 'futures' else 'TQBR'
+        board = resolve_default_board(exchange, engine)
 
         # Определяем период данных
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
 
-        adapter = MOEXAdapter(engine=engine, market=market)
-        df, _ = load_data_with_indicators(
+        adapter = build_exchange_adapter(exchange, engine, market)
+        df, _ = load_data_with_indicators_for_exchange(
+            exchange=exchange,
             ticker=ticker,
             timeframe=timeframe,
+            start_date=start_date,
+            end_date=end_date,
             board=board,
             adapter=adapter,
-            start_date=start_date,
-            end_date=end_date
         )
 
         if df.empty:

@@ -63,6 +63,7 @@ class TradingSystemClient:
         deposit: float,
         timeframe: str = "1h",
         model: str = "balanced",
+        exchange: str = "moex",
         engine: str = "stock",
         market: str = "shares",
         board: Optional[str] = None
@@ -75,6 +76,7 @@ class TradingSystemClient:
             deposit: Размер депозита в рублях
             timeframe: Таймфрейм ('1m', '5m', '10m', '1h', '1d' и т.д.)
             model: Торговая модель ('conservative', 'high_rr', 'balanced', 'aggressive', 'scalp')
+            exchange: Биржа/источник данных ('moex', 'binance')
             engine: Движок ('stock' для акций, 'futures' для фьючерсов)
             market: Рынок ('shares' для акций, 'forts' для фьючерсов)
             board: Режим торгов (опционально, определяется автоматически)
@@ -91,6 +93,7 @@ class TradingSystemClient:
             "deposit": deposit,
             "timeframe": timeframe,
             "model": model,
+            "exchange": exchange,
             "engine": engine,
             "market": market
         }
@@ -110,6 +113,7 @@ class TradingSystemClient:
         deposit: float,
         timeframe: str = "1h",
         model: str = "balanced",
+        exchange: str = "moex",
         engine: str = "stock",
         market: str = "shares",
         board: Optional[str] = None
@@ -122,6 +126,7 @@ class TradingSystemClient:
             deposit: Размер депозита в рублях
             timeframe: Таймфрейм
             model: Торговая модель
+            exchange: Биржа/источник данных ('moex', 'binance')
             engine: Движок ('stock' или 'futures')
             market: Рынок ('shares' или 'forts')
             board: Режим торгов (опционально)
@@ -139,6 +144,7 @@ class TradingSystemClient:
             "deposit": deposit,
             "timeframe": timeframe,
             "model": model,
+            "exchange": exchange,
             "engine": engine,
             "market": market
         }
@@ -157,6 +163,7 @@ class TradingSystemClient:
         ticker: str,
         deposit: float,
         timeframe: str = "1h",
+        exchange: str = "moex",
         engine: str = "stock",
         market: str = "shares",
         board: Optional[str] = None
@@ -168,6 +175,7 @@ class TradingSystemClient:
             ticker: Тикер инструмента
             deposit: Размер депозита в рублях
             timeframe: Таймфрейм
+            exchange: Биржа/источник данных ('moex', 'binance')
             engine: Движок ('stock' или 'futures')
             market: Рынок ('shares' или 'forts')
             board: Режим торгов (опционально)
@@ -186,6 +194,7 @@ class TradingSystemClient:
             "ticker": ticker,
             "deposit": deposit,
             "timeframe": timeframe,
+            "exchange": exchange,
             "engine": engine,
             "market": market
         }

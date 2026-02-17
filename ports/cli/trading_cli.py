@@ -6,7 +6,7 @@ CLI для профессиональной торговой системы с �
 import argparse
 import json
 import sys
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Any, Optional
 
 try:
@@ -15,6 +15,12 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     Fore = Style = None
     HAS_COLORAMA = False
+from adapters import (
+    build_exchange_adapter as composite_build_exchange_adapter,
+    load_cli_dataset_for_exchange as composite_load_cli_dataset_for_exchange,
+    monitor_setups_for_exchange as composite_monitor_setups_for_exchange,
+    resolve_default_board as composite_resolve_default_board,
+)
 from services.strategy_engine.adaptive_model import build_regime_model
 from services.strategy_engine.adaptive_signal_engine import AdaptiveSignalEngine
 from services.strategy_engine.backtest_engine import evaluate_model
@@ -44,20 +50,35 @@ from services.strategy_engine import (
 
 COLOR_ENABLED = False
 SUPPORTED_EXCHANGES = ("moex", "binance")
+BINANCE_QUOTE_ASSETS = (
+    "USDT",
+    "USDC",
+    "FDUSD",
+    "BUSD",
+    "TUSD",
+    "USD",
+    "EUR",
+    "TRY",
+    "BRL",
+    "RUB",
+    "BTC",
+    "ETH",
+    "BNB",
+)
+
+
+def configure_cli_logger() -> None:
+    """Configure loguru for clean CLI output without technical prefixes."""
+    logger.remove()
+    logger.add(sys.stdout, format="{message}", level="INFO")
 
 
 def _default_board(exchange: str, engine: str) -> str:
-    if exchange == "moex":
-        return "RFUD" if engine == "futures" else "TQBR"
-    return ""
+    return composite_resolve_default_board(exchange, engine)
 
 
 def _build_exchange_adapter(exchange: str, engine: str, market: str):
-    if exchange == "moex":
-        from adapters.moex.iss_client import MOEXAdapter
-
-        return MOEXAdapter(engine=engine, market=market)
-    raise NotImplementedError(f"Exchange '{exchange}' is not implemented yet.")
+    return composite_build_exchange_adapter(exchange, engine, market)
 
 
 def _load_cli_dataset(
@@ -71,19 +92,16 @@ def _load_cli_dataset(
     adapter,
     limit: Optional[int] = None,
 ):
-    if exchange == "moex":
-        from adapters.moex.cli_dataset_loader import load_cli_dataset
-
-        return load_cli_dataset(
-            ticker=ticker,
-            timeframe=timeframe,
-            start_date=start_date,
-            end_date=end_date,
-            board=board,
-            adapter=adapter,
-            limit=limit,
-        )
-    raise NotImplementedError(f"Exchange '{exchange}' is not implemented yet.")
+    return composite_load_cli_dataset_for_exchange(
+        exchange=exchange,
+        ticker=ticker,
+        timeframe=timeframe,
+        start_date=start_date,
+        end_date=end_date,
+        board=board,
+        adapter=adapter,
+        limit=limit,
+    )
 
 
 def _monitor_setups(
@@ -99,21 +117,18 @@ def _monitor_setups(
     filter_config: dict[str, Any] | None,
     monitor_workers: int,
 ):
-    if exchange == "moex":
-        from adapters.moex.setup_monitor import monitor_setups
-
-        return monitor_setups(
-            setups=setups,
-            adapter=adapter,
-            board=board,
-            interval_seconds=interval_seconds,
-            export_path=export_path,
-            sender=sender,
-            max_cycles=max_cycles,
-            filter_config=filter_config,
-            monitor_workers=monitor_workers,
-        )
-    raise NotImplementedError(f"Exchange '{exchange}' is not implemented yet.")
+    return composite_monitor_setups_for_exchange(
+        exchange=exchange,
+        setups=setups,
+        adapter=adapter,
+        board=board,
+        interval_seconds=interval_seconds,
+        export_path=export_path,
+        sender=sender,
+        max_cycles=max_cycles,
+        filter_config=filter_config,
+        monitor_workers=monitor_workers,
+    )
 
 
 def _resolve_contract_spec(
@@ -207,10 +222,36 @@ def print_model_info(model):
     print_separator()
 
 
+def _resolve_price_precision(signal_dict: dict[str, Any]) -> int:
+    reference = 1.0
+    for key in ("entry", "stop", "target"):
+        try:
+            value = abs(float(signal_dict.get(key, 0.0)))
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            reference = value
+            break
+
+    if reference >= 100:
+        return 2
+    if reference >= 10:
+        return 3
+    if reference >= 1:
+        return 4
+    if reference >= 0.1:
+        return 5
+    if reference >= 0.01:
+        return 6
+    return 8
+
+
 def print_signal_report(
     signal_dict: dict,
     cost_config: Optional[dict[str, Any]] = None,
     contract_multiplier: float = 1.0,
+    money_label: str = "рублях",
+    money_unit: str = "₽",
 ):
     """Красивый вывод торгового сигнала"""
     print_separator(color='blue')
@@ -225,33 +266,35 @@ def print_signal_report(
     direction_color = {'long': 'green', 'short': 'red', 'none': 'yellow'}.get(signal_dict['signal'], 'white')
     logger.info(f"\nНаправление: {colorize(signal_emoji.get(signal_dict['signal'], signal_dict['signal']), direction_color, bright=True)}")
     logger.info(f"Уверенность: {signal_dict['confidence'].upper()}")
+    price_precision = _resolve_price_precision(signal_dict)
+    atr_precision = max(2, min(8, price_precision))
 
     if signal_dict['signal'] != 'none':
         effective_multiplier = contract_multiplier if contract_multiplier > 0 else 1.0
 
         logger.info(f"\n💰 ПАРАМЕТРЫ СДЕЛКИ:")
-        logger.info(f"   Вход:     {signal_dict['entry']:.2f}")
-        logger.info(f"   Стоп:     {signal_dict['stop']:.2f}")
-        logger.info(f"   Цель:     {signal_dict['target']:.2f}")
+        logger.info(f"   Вход:     {signal_dict['entry']:.{price_precision}f}")
+        logger.info(f"   Стоп:     {signal_dict['stop']:.{price_precision}f}")
+        logger.info(f"   Цель:     {signal_dict['target']:.{price_precision}f}")
         logger.info(f"   RR:       {signal_dict['rr']:.2f}")
 
         logger.info(f"\n📈 РИСК-МЕНЕДЖМЕНТ:")
         logger.info(f"   Размер позиции:  {signal_dict['position_size']:.0f} контрактов")
-        logger.info(f"   Риск в рублях:   {signal_dict['risk_rub']:.2f} ₽")
+        logger.info(f"   Риск в {money_label}:   {signal_dict['risk_rub']:.2f} {money_unit}")
         logger.info(f"   Риск в %:        {signal_dict['risk_percent']:.2f}%")
         fee_estimate = estimate_signal_fee(signal_dict, cost_config or {})
-        logger.info(f"   Fee (оценка):    {fee_estimate:.2f} ₽")
+        logger.info(f"   Fee (оценка):    {fee_estimate:.2f} {money_unit}")
         potential_profit = (
             abs(signal_dict['target'] - signal_dict['entry'])
             * signal_dict['position_size']
             * effective_multiplier
         )
-        logger.info(f"   Потенциал:       {potential_profit:.2f} ₽")
+        logger.info(f"   Потенциал:       {potential_profit:.2f} {money_unit}")
 
     logger.info(f"\n📉 СТРУКТУРА РЫНКА:")
     logger.info(f"   Тренд:           {signal_dict['structure']}")
     logger.info(f"   Фаза:            {signal_dict['phase']}")
-    logger.info(f"   ATR:             {signal_dict['atr']:.2f}")
+    logger.info(f"   ATR:             {signal_dict['atr']:.{atr_precision}f}")
     if signal_dict.get('market_regime'):
         logger.info(f"   Regime:          {signal_dict['market_regime']}")
 
@@ -583,6 +626,21 @@ def parse_symbols(symbols_arg: Optional[str]) -> list[str]:
     return [s.strip() for s in symbols_arg.split(',') if s.strip()]
 
 
+def _infer_binance_quote_asset(symbol: str) -> str:
+    raw = str(symbol or "").upper()
+    for quote in BINANCE_QUOTE_ASSETS:
+        if raw.endswith(quote) and len(raw) > len(quote):
+            return quote
+    return "USDT"
+
+
+def _resolve_money_display(exchange: str, symbol: str) -> tuple[str, str]:
+    if exchange == "binance":
+        quote_asset = _infer_binance_quote_asset(symbol)
+        return quote_asset, quote_asset
+    return "рублях", "₽"
+
+
 def run_backtest_for_symbol(
     exchange: str,
     symbol: str,
@@ -656,7 +714,7 @@ def run_backtest_for_symbol(
         for warning in data_result.warnings:
             logger.info(warning)
         if data_result.warnings:
-            logger.info()
+            logger.info("")
         print_separator(color='cyan')
         logger.info(colorize(f"🔄 ОПТИМИЗАЦИЯ МОДЕЛЕЙ ДЛЯ {symbol}", 'cyan', bright=True))
         print_separator(color='cyan')
@@ -1186,6 +1244,7 @@ def main():
                         help='Срок действия сетапа в свечах (по умолчанию: 5)')
 
     args = parser.parse_args()
+    configure_cli_logger()
     setup_cli_colors(enabled=(not args.json and not args.no_color))
 
     try:
@@ -1213,6 +1272,8 @@ def main():
         parser.error("--setup-expiry-candles must be > 0")
     if args.generate_setups and (args.optimize or args.backtest):
         parser.error("--generate-setups нельзя комбинировать с --optimize/--backtest")
+    if args.monitor and args.exchange != "moex":
+        parser.error("--monitor currently supports only --exchange moex")
 
     # Список моделей
     if args.list_models:
@@ -1496,7 +1557,7 @@ def main():
             logger.info("   • Volume")
         if effective_disable_trend:
             logger.info("   • Trend")
-        logger.info()
+        logger.info("")
 
     # Оптимизация по нескольким инструментам
     if symbols:
@@ -1699,7 +1760,7 @@ def main():
         for warning in data_result.warnings:
             logger.info(warning)
         if data_result.warnings:
-            logger.info()
+            logger.info("")
 
     # Показываем информацию о модели
     if not args.json and not args.no_signal:
@@ -1804,10 +1865,13 @@ def main():
         logger.info(json.dumps(output, indent=2, ensure_ascii=False))
     else:
         if signal:
+            money_label, money_unit = _resolve_money_display(args.exchange, args.ticker)
             print_signal_report(
-                signal.to_dict(),
+                asdict(signal),
                 cost_config=signal_cost_config,
                 contract_multiplier=report_contract_multiplier,
+                money_label=money_label,
+                money_unit=money_unit,
             )
         if backtest_result:
             backtest_dict = backtest_result.to_dict()

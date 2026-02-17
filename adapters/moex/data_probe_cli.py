@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 import pandas as pd
 
@@ -17,6 +18,11 @@ from services.strategy_engine.indicators import get_latest_signals
 
 DEFAULT_MA_PERIODS = "50,200"
 DEFAULT_ROWS = 20
+
+
+def _configure_cli_logger() -> None:
+    logger.remove()
+    logger.add(sys.stdout, format="{message}", level="INFO")
 
 
 def _parse_ma_periods(raw: str) -> list[int]:
@@ -162,6 +168,7 @@ def run_probe(args: argparse.Namespace) -> int:
 
 
 def cli_main() -> int:
+    _configure_cli_logger()
     parser = build_parser()
     args = parser.parse_args()
     return run_probe(args)

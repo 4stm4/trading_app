@@ -12,10 +12,12 @@ from services.strategy_engine import (
     get_model,
     generate_signal,
     run_backtest,
-    compare_models_results
 )
-from adapters.moex import load_data_with_indicators
-from adapters.moex.iss_client import MOEXAdapter
+from adapters import (
+    build_exchange_adapter,
+    load_data_with_indicators_for_exchange,
+    resolve_default_board,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -127,7 +129,7 @@ class SignalView(MethodView):
             "board": "TQBR"
         }
         """
-        data = request.get_json()
+        data = request.get_json() or {}
 
         # Валидация
         required_fields = ['ticker', 'deposit']
@@ -139,24 +141,28 @@ class SignalView(MethodView):
         deposit = data['deposit']
         timeframe = data.get('timeframe', '1h')
         model_name = data.get('model', 'balanced')
+        exchange = data.get('exchange', 'moex')
         engine = data.get('engine', 'stock')
         market = data.get('market', 'shares')
         board = data.get('board')
 
         if board is None:
-            board = 'RFUD' if engine == 'futures' else 'TQBR'
+            board = resolve_default_board(exchange, engine)
 
         try:
             # Получаем модель
             model = get_model(model_name)
 
             # Загружаем данные
-            adapter = MOEXAdapter(engine=engine, market=market)
-            df, _ = load_data_with_indicators(
+            adapter = build_exchange_adapter(exchange, engine, market)
+            df, _ = load_data_with_indicators_for_exchange(
+                exchange=exchange,
                 ticker=ticker,
                 timeframe=timeframe,
+                start_date=None,
+                end_date=None,
                 board=board,
-                adapter=adapter
+                adapter=adapter,
             )
 
             if df.empty:
@@ -168,6 +174,7 @@ class SignalView(MethodView):
 
             return jsonify({
                 'ticker': ticker,
+                'exchange': exchange,
                 'timeframe': timeframe,
                 'model': model_name,
                 'data_points': len(df),
@@ -179,6 +186,8 @@ class SignalView(MethodView):
             })
 
         except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except NotImplementedError as e:
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             logger.error(f"Error generating signal: {e}")
@@ -202,7 +211,7 @@ class BacktestView(MethodView):
             "market": "shares"
         }
         """
-        data = request.get_json()
+        data = request.get_json() or {}
 
         required_fields = ['ticker', 'deposit']
         for field in required_fields:
@@ -213,24 +222,28 @@ class BacktestView(MethodView):
         deposit = data['deposit']
         timeframe = data.get('timeframe', '1h')
         model_name = data.get('model', 'balanced')
+        exchange = data.get('exchange', 'moex')
         engine = data.get('engine', 'stock')
         market = data.get('market', 'shares')
         board = data.get('board')
 
         if board is None:
-            board = 'RFUD' if engine == 'futures' else 'TQBR'
+            board = resolve_default_board(exchange, engine)
 
         try:
             # Получаем модель
             model = get_model(model_name)
 
             # Загружаем данные
-            adapter = MOEXAdapter(engine=engine, market=market)
-            df, _ = load_data_with_indicators(
+            adapter = build_exchange_adapter(exchange, engine, market)
+            df, _ = load_data_with_indicators_for_exchange(
+                exchange=exchange,
                 ticker=ticker,
                 timeframe=timeframe,
+                start_date=None,
+                end_date=None,
                 board=board,
-                adapter=adapter
+                adapter=adapter,
             )
 
             if df.empty:
@@ -250,6 +263,7 @@ class BacktestView(MethodView):
 
             return jsonify({
                 'ticker': ticker,
+                'exchange': exchange,
                 'timeframe': timeframe,
                 'model': model_name,
                 'data_points': len(df),
@@ -261,6 +275,8 @@ class BacktestView(MethodView):
             })
 
         except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except NotImplementedError as e:
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             logger.error(f"Error running backtest: {e}")
@@ -283,7 +299,7 @@ class OptimizeView(MethodView):
             "market": "shares"
         }
         """
-        data = request.get_json()
+        data = request.get_json() or {}
 
         required_fields = ['ticker', 'deposit']
         for field in required_fields:
@@ -293,21 +309,25 @@ class OptimizeView(MethodView):
         ticker = data['ticker']
         deposit = data['deposit']
         timeframe = data.get('timeframe', '1h')
+        exchange = data.get('exchange', 'moex')
         engine = data.get('engine', 'stock')
         market = data.get('market', 'shares')
         board = data.get('board')
 
         if board is None:
-            board = 'RFUD' if engine == 'futures' else 'TQBR'
+            board = resolve_default_board(exchange, engine)
 
         try:
             # Загружаем данные
-            adapter = MOEXAdapter(engine=engine, market=market)
-            df, _ = load_data_with_indicators(
+            adapter = build_exchange_adapter(exchange, engine, market)
+            df, _ = load_data_with_indicators_for_exchange(
+                exchange=exchange,
                 ticker=ticker,
                 timeframe=timeframe,
+                start_date=None,
+                end_date=None,
                 board=board,
-                adapter=adapter
+                adapter=adapter,
             )
 
             if df.empty:
@@ -334,6 +354,7 @@ class OptimizeView(MethodView):
 
             return jsonify({
                 'ticker': ticker,
+                'exchange': exchange,
                 'timeframe': timeframe,
                 'data_points': len(df),
                 'period': {
@@ -351,6 +372,8 @@ class OptimizeView(MethodView):
             })
 
         except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except NotImplementedError as e:
             return jsonify({'error': str(e)}), 400
         except Exception as e:
             logger.error(f"Error optimizing models: {e}")

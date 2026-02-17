@@ -14,7 +14,7 @@ filters:
 
   pullback:
     enabled: true
-    max_ma50_distance_pct: 1.0 
+    max_ma50_distance_pct: 1.5 
     require_pullback: true
 
   rsi:

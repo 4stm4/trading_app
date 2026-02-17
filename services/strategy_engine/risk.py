@@ -7,6 +7,9 @@ from dataclasses import dataclass
 import math
 
 
+RR_COMPARISON_EPS = 1e-9
+
+
 @dataclass
 class RiskParameters:
     """Результат расчета риска"""
@@ -73,7 +76,7 @@ def calculate_position_risk(
     rr = profit_per_unit / risk_per_unit
 
     # Проверка минимального RR
-    if rr < min_rr:
+    if rr + RR_COMPARISON_EPS < min_rr:
         return RiskParameters(
             valid=False,
             rr=rr,
