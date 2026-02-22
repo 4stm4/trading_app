@@ -5,9 +5,13 @@ from datetime import datetime
 
 
 @dataclass
-class User:
-    email: str
-    password_hash: str
+class Instrument:
+    exchange: str
+    symbol: str
+    name: str
+    board: str | None = None
+    lot_size: int | None = None
+    currency: str = "RUB"
     is_active: bool = True
     id: int | None = None
     created_at: datetime | None = None

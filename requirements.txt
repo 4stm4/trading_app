@@ -3,9 +3,8 @@ binance-connector
 colorama
 dash
 dash-bootstrap-components
+fastapi
 Flask
-Flask-Login
-Flask-SQLAlchemy
 loguru
 pandas
 pydantic
@@ -13,6 +12,7 @@ pydantic-settings
 pyjobkit
 PyYAML
 requests
+uvicorn
 websockets
 
 # Database driver for the mssql+pymssql URL in settings.APP_DB_URL

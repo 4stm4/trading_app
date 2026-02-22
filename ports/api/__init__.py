@@ -1,4 +1,4 @@
-"""HTTP API port (Flask app + Python client)."""
+"""HTTP API port (FastAPI app + Python client)."""
 
 from .app import create_app
 from .client import TradingSystemClient

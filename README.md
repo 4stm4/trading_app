@@ -149,6 +149,7 @@ REST API расположен в `ports/api`.
 Ключевые endpoints.
 - `GET /api/health`
 - `GET /api/models`
+- `GET /api/moex/instruments`
 - `POST /api/signal`
 - `POST /api/backtest`
 - `POST /api/optimize`
@@ -199,6 +200,31 @@ REST API расположен в `ports/api`.
 - CLI: запуск из `ports.cli.trading_cli` с параметрами тикера, депозита и режима рынка.
 - API: запуск `run_api.py` и работа через HTTP endpoints.
 - Frontend: запуск `run_frontend.py` и работа через браузерный dashboard.
+
+## Backend: сборка и запуск
+### 1. Подготовка окружения (сборка backend)
+```bash
+cd trading_app
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 2. Запуск backend API
+```bash
+cd trading_app
+source .venv/bin/activate
+python run_api.py
+```
+
+Backend будет доступен на `http://localhost:5000`.
+
+### 3. Проверка, что backend запущен
+```bash
+curl http://localhost:5000/api/health
+curl "http://localhost:5000/api/moex/instruments?board=TQBR&limit=5"
+```
 
 ## Производительность
 Типичные ориентиры.
