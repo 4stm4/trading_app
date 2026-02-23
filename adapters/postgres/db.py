@@ -38,6 +38,7 @@ def session_scope(session_factory: sessionmaker[Session]) -> Iterator[Session]:
 
 def create_schema(engine: Engine) -> None:
     create_user_schema(engine)
+    create_portfolio_schema(engine)
     create_instrument_schema(engine)
     create_market_candle_schema(engine)
     create_recommended_sale_schema(engine)
@@ -45,6 +46,7 @@ def create_schema(engine: Engine) -> None:
     create_trading_system_schema(engine)
     create_trading_system_version_schema(engine)
     create_trading_system_run_schema(engine)
+    create_trading_system_run_artifact_schema(engine)
     create_trading_system_signal_schema(engine)
 
 
@@ -58,6 +60,12 @@ def create_user_schema(engine: Engine) -> None:
     from .user.tables import UserTable
 
     Base.metadata.create_all(bind=engine, tables=[UserTable.__table__])
+
+
+def create_portfolio_schema(engine: Engine) -> None:
+    from .portfolio.tables import PortfolioTable
+
+    Base.metadata.create_all(bind=engine, tables=[PortfolioTable.__table__])
 
 
 def create_recommended_sale_schema(engine: Engine) -> None:
@@ -94,6 +102,12 @@ def create_trading_system_run_schema(engine: Engine) -> None:
     from .trading_system_run.tables import TradingSystemRunTable
 
     Base.metadata.create_all(bind=engine, tables=[TradingSystemRunTable.__table__])
+
+
+def create_trading_system_run_artifact_schema(engine: Engine) -> None:
+    from .trading_system_run_artifact.tables import TradingSystemRunArtifactTable
+
+    Base.metadata.create_all(bind=engine, tables=[TradingSystemRunArtifactTable.__table__])
 
 
 def create_trading_system_signal_schema(engine: Engine) -> None:

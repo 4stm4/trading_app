@@ -25,15 +25,37 @@ class TradingSystemRunPostgresRepository:
             return None
         return to_entity(row)
 
+    def list_by_owner(
+        self,
+        *,
+        owner_user_id: int,
+        run_type: str | None = None,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[TradingSystemRun]:
+        stmt = select(TradingSystemRunTable).where(TradingSystemRunTable.owner_user_id == int(owner_user_id))
+        if run_type:
+            stmt = stmt.where(TradingSystemRunTable.run_type == _normalize_run_type(run_type))
+        if status:
+            stmt = stmt.where(TradingSystemRunTable.status == _normalize_status(status))
+        stmt = stmt.order_by(TradingSystemRunTable.created_at.desc(), TradingSystemRunTable.id.desc()).limit(
+            max(1, int(limit))
+        )
+        rows: Sequence[TradingSystemRunTable] = self._session.scalars(stmt).all()
+        return [to_entity(row) for row in rows]
+
     def list_by_system(
         self,
         *,
+        owner_user_id: int | None = None,
         system_id: int,
         run_type: str | None = None,
         status: str | None = None,
         limit: int = 100,
     ) -> list[TradingSystemRun]:
         stmt = select(TradingSystemRunTable).where(TradingSystemRunTable.system_id == int(system_id))
+        if owner_user_id is not None:
+            stmt = stmt.where(TradingSystemRunTable.owner_user_id == int(owner_user_id))
         if run_type:
             stmt = stmt.where(TradingSystemRunTable.run_type == _normalize_run_type(run_type))
         if status:
@@ -53,7 +75,10 @@ class TradingSystemRunPostgresRepository:
     def start(
         self,
         *,
+        owner_user_id: int,
         system_id: int,
+        portfolio_id: int | None = None,
+        portfolio_balance_snapshot: float | None = None,
         run_type: str,
         system_version_id: int | None = None,
         request_json: dict[str, Any] | None = None,
@@ -61,7 +86,14 @@ class TradingSystemRunPostgresRepository:
         now = datetime.now(timezone.utc)
         return self.add(
             TradingSystemRun(
+                owner_user_id=int(owner_user_id),
                 system_id=int(system_id),
+                portfolio_id=int(portfolio_id) if portfolio_id is not None else None,
+                portfolio_balance_snapshot=(
+                    float(portfolio_balance_snapshot)
+                    if portfolio_balance_snapshot is not None
+                    else None
+                ),
                 system_version_id=system_version_id,
                 run_type=_normalize_run_type(run_type),
                 status="running",

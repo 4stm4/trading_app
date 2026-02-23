@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -12,22 +12,34 @@ from ..base import Base
 class TradingSystemRunTable(Base):
     __tablename__ = "trading_system_runs"
     __table_args__ = (
+        Index("ix_trading_system_runs_owner_created", "owner_user_id", "created_at"),
         Index("ix_trading_system_runs_system_created", "system_id", "created_at"),
         Index("ix_trading_system_runs_status", "status"),
         Index("ix_trading_system_runs_type_status", "run_type", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("auth_users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     system_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("trading_systems.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    portfolio_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("portfolios.id", ondelete="SET NULL"),
+        nullable=True,
     )
     system_version_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("trading_system_versions.id", ondelete="SET NULL"),
         nullable=True,
     )
+    portfolio_balance_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
     run_type: Mapped[str] = mapped_column(String(32), nullable=False)
     status: Mapped[str] = mapped_column(
         String(32),

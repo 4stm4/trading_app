@@ -7,9 +7,12 @@ from typing import Any
 
 @dataclass
 class TradingSystemRun:
+    owner_user_id: int
     system_id: int
     run_type: str
     status: str = "pending"
+    portfolio_id: int | None = None
+    portfolio_balance_snapshot: float | None = None
     system_version_id: int | None = None
     request_json: dict[str, Any] | None = None
     result_summary_json: dict[str, Any] | None = None

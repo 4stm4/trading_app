@@ -13,7 +13,10 @@ from .tables import TradingSystemRunTable
 def to_entity(table_row: TradingSystemRunTable) -> TradingSystemRun:
     return TradingSystemRun(
         id=table_row.id,
+        owner_user_id=table_row.owner_user_id,
         system_id=table_row.system_id,
+        portfolio_id=table_row.portfolio_id,
+        portfolio_balance_snapshot=table_row.portfolio_balance_snapshot,
         system_version_id=table_row.system_version_id,
         run_type=table_row.run_type,
         status=table_row.status,
@@ -28,8 +31,15 @@ def to_entity(table_row: TradingSystemRunTable) -> TradingSystemRun:
 
 def to_table(system_run: TradingSystemRun, target: TradingSystemRunTable | None = None) -> TradingSystemRunTable:
     table_row = target or TradingSystemRunTable()
+    table_row.owner_user_id = int(system_run.owner_user_id)
     table_row.system_id = int(system_run.system_id)
+    table_row.portfolio_id = int(system_run.portfolio_id) if system_run.portfolio_id is not None else None
     table_row.system_version_id = int(system_run.system_version_id) if system_run.system_version_id is not None else None
+    table_row.portfolio_balance_snapshot = (
+        float(system_run.portfolio_balance_snapshot)
+        if system_run.portfolio_balance_snapshot is not None
+        else None
+    )
     table_row.run_type = _normalize_run_type(system_run.run_type)
     table_row.status = _normalize_status(system_run.status)
     table_row.request_json = _normalize_json_or_none(system_run.request_json)

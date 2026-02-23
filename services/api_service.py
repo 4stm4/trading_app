@@ -20,7 +20,10 @@ from adapters import (
 )
 from adapters.postgres import (
     MarketCandlePostgresRepository,
+    PortfolioPostgresRepository,
     TradingModelPostgresRepository,
+    TradingSystemRunArtifactPostgresRepository,
+    TradingSystemRunPostgresRepository,
     TradingSystemPostgresRepository,
     TradingSystemVersionPostgresRepository,
     UserPostgresRepository,
@@ -29,7 +32,9 @@ from adapters.postgres import (
     session_scope,
 )
 from entities.trading_system import TradingSystem
+from entities.trading_system_run_artifact import TradingSystemRunArtifact
 from entities.user import User
+from entities.portfolio import Portfolio
 from services.strategy_engine import (
     MODELS,
     calculate_atr,
@@ -268,6 +273,124 @@ def build_system_set_current_response(payload: dict[str, Any]) -> dict[str, Any]
         return _json_safe({
             "current_system_id": int(refreshed.id),
             "system": _serialize_trading_system(refreshed, version_repo=version_repo),
+        })
+
+
+def build_portfolio_response(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    body = payload or {}
+    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        portfolio_repo = PortfolioPostgresRepository(session)
+        portfolio = portfolio_repo.ensure_for_owner(owner_user_id=int(user.id))
+        return _json_safe({
+            "owner_user_id": int(user.id),
+            "portfolio": _serialize_portfolio(portfolio),
+        })
+
+
+def build_portfolio_update_response(payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    raw_balance = payload.get("balance", payload.get("deposit"))
+    if raw_balance is None:
+        raise ApiValidationError("balance is required")
+    balance = _coerce_float(raw_balance, default=100000.0, min_value=0.0, max_value=10_000_000_000.0)
+    currency = str(payload.get("currency") or "RUB").strip().upper() or "RUB"
+    is_active = _to_bool(payload.get("is_active"), default=True)
+
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        portfolio_repo = PortfolioPostgresRepository(session)
+        existing = portfolio_repo.ensure_for_owner(owner_user_id=int(user.id))
+        updated = portfolio_repo.upsert_by_owner(
+            Portfolio(
+                owner_user_id=int(user.id),
+                balance=balance,
+                currency=currency,
+                is_active=bool(is_active),
+                id=existing.id,
+                created_at=existing.created_at,
+            )
+        )
+        return _json_safe({
+            "owner_user_id": int(user.id),
+            "portfolio": _serialize_portfolio(updated),
+        })
+
+
+def build_system_runs_response(system_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    body = payload or {}
+    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    run_type = str(body.get("run_type") or "").strip().lower() or None
+    status = str(body.get("status") or "").strip().lower() or None
+    limit = _coerce_int(body.get("limit", 100), default=100, min_value=1, max_value=500)
+
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        system_repo = TradingSystemPostgresRepository(session)
+        run_repo = TradingSystemRunPostgresRepository(session)
+
+        system = system_repo.get_by_id(int(system_id))
+        if system is None or system.id is None or int(system.owner_user_id) != int(user.id):
+            raise ApiNotFoundError("System not found")
+
+        runs = run_repo.list_by_system(
+            owner_user_id=int(user.id),
+            system_id=int(system.id),
+            run_type=run_type,
+            status=status,
+            limit=limit,
+        )
+        return _json_safe({
+            "owner_user_id": int(user.id),
+            "system_id": int(system.id),
+            "count": len(runs),
+            "runs": [_serialize_system_run(item) for item in runs],
+        })
+
+
+def build_system_run_artifacts_response(run_id: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    body = payload or {}
+    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    artifact_type = str(body.get("artifact_type") or "").strip().lower() or None
+    limit = _coerce_int(body.get("limit", 50), default=50, min_value=1, max_value=500)
+
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        run_repo = TradingSystemRunPostgresRepository(session)
+        artifact_repo = TradingSystemRunArtifactPostgresRepository(session)
+
+        run = run_repo.get_by_id(int(run_id))
+        if run is None or run.id is None or int(run.owner_user_id) != int(user.id):
+            raise ApiNotFoundError("Run not found")
+
+        artifacts = artifact_repo.list_by_run(
+            owner_user_id=int(user.id),
+            run_id=int(run.id),
+            artifact_type=artifact_type,
+            limit=limit,
+        )
+        return _json_safe({
+            "owner_user_id": int(user.id),
+            "run": _serialize_system_run(run),
+            "count": len(artifacts),
+            "artifacts": [_serialize_run_artifact(item) for item in artifacts],
         })
 
 
@@ -528,53 +651,72 @@ def build_dashboard_backtest_response(payload: dict[str, Any]) -> dict[str, Any]
         max_value=1000,
     )
     debug_filters = _to_bool(payload.get("debug_filters"), default=True)
+    run_context = _resolve_system_run_context(payload, run_type="backtest")
+    run_id = _start_system_run(run_context, run_type="backtest", request_payload=payload)
 
-    df, adapter = _load_dataset(params, limit=resolved_limit)
-    if df.empty:
-        df, adapter = _load_dataset(
-            params,
-            limit=resolved_limit,
-            start_date="2010-01-01",
+    try:
+        df, adapter = _load_dataset(params, limit=resolved_limit)
+        if df.empty:
+            df, adapter = _load_dataset(
+                params,
+                limit=resolved_limit,
+                start_date="2010-01-01",
+            )
+        if df.empty:
+            raise ApiNotFoundError(f"No data for {params['ticker']}")
+
+        risk_params = _resolve_contract_risk_params(adapter, params["ticker"], params["board"])
+
+        results = run_backtest(
+            df=df,
+            signal_generator=generate_signal,
+            deposit=params["deposit"],
+            model=model,
+            lookback_window=lookback_window,
+            max_holding_candles=max_holding_candles,
+            signal_kwargs=risk_params or None,
+            debug_filters=debug_filters,
+            execution_config={"sl_tp_only": True},
         )
-    if df.empty:
-        raise ApiNotFoundError(f"No data for {params['ticker']}")
 
-    risk_params = _resolve_contract_risk_params(adapter, params["ticker"], params["board"])
+        equity_curve, drawdown_curve = _build_equity_and_drawdown_curves(
+            trades=results.trades,
+            initial_balance=params["deposit"],
+            start_time=df.index[0] if len(df.index) > 0 else None,
+        )
 
-    results = run_backtest(
-        df=df,
-        signal_generator=generate_signal,
-        deposit=params["deposit"],
-        model=model,
-        lookback_window=lookback_window,
-        max_holding_candles=max_holding_candles,
-        signal_kwargs=risk_params or None,
-        debug_filters=debug_filters,
-        execution_config={"sl_tp_only": True},
-    )
-
-    equity_curve, drawdown_curve = _build_equity_and_drawdown_curves(
-        trades=results.trades,
-        initial_balance=params["deposit"],
-        start_time=df.index[0] if len(df.index) > 0 else None,
-    )
-
-    return _json_safe({
-        "ticker": params["ticker"],
-        "exchange": params["exchange"],
-        "timeframe": params["timeframe"],
-        "engine": params["engine"],
-        "market": params["market"],
-        "board": params["board"],
-        "model": params["model_name"],
-        "data_points": len(df),
-        "period": {"start": str(df.index[0]), "end": str(df.index[-1])},
-        "summary": results.to_dict(),
-        "trades": [_serialize_trade(trade) for trade in results.trades],
-        "equity_curve": equity_curve,
-        "drawdown_curve": drawdown_curve,
-        "filter_funnel": results.filter_stats.to_dict() if results.filter_stats else None,
-    })
+        response_payload = {
+            "ticker": params["ticker"],
+            "exchange": params["exchange"],
+            "timeframe": params["timeframe"],
+            "engine": params["engine"],
+            "market": params["market"],
+            "board": params["board"],
+            "model": params["model_name"],
+            "data_points": len(df),
+            "period": {"start": str(df.index[0]), "end": str(df.index[-1])},
+            "summary": results.to_dict(),
+            "trades": [_serialize_trade(trade) for trade in results.trades],
+            "equity_curve": equity_curve,
+            "drawdown_curve": drawdown_curve,
+            "filter_funnel": results.filter_stats.to_dict() if results.filter_stats else None,
+        }
+        _finish_system_run_success(
+            run_context=run_context,
+            run_id=run_id,
+            result_summary=response_payload["summary"],
+            artifacts={
+                "summary": response_payload["summary"],
+                "trades": {"items": response_payload["trades"]},
+                "equity_curve": {"items": response_payload["equity_curve"]},
+                "drawdown_curve": {"items": response_payload["drawdown_curve"]},
+                "filter_funnel": response_payload["filter_funnel"] or {},
+            },
+        )
+        return _json_safe(response_payload)
+    except Exception as error:
+        _finish_system_run_failure(run_context=run_context, run_id=run_id, error_text=str(error))
+        raise
 
 
 def build_dashboard_robustness_response(payload: dict[str, Any]) -> dict[str, Any]:
@@ -588,107 +730,129 @@ def build_dashboard_robustness_response(payload: dict[str, Any]) -> dict[str, An
         max_value=5000,
     )
     adaptive_regime = _to_bool(payload.get("adaptive_regime"), default=False)
+    run_context = _resolve_system_run_context(payload, run_type="robustness")
+    run_id = _start_system_run(run_context, run_type="robustness", request_payload=payload)
 
-    df, adapter = _load_dataset(params, limit=resolved_limit)
-    if df.empty:
-        df, adapter = _load_dataset(
-            params,
-            limit=resolved_limit,
-            start_date="2010-01-01",
+    try:
+        df, adapter = _load_dataset(params, limit=resolved_limit)
+        if df.empty:
+            df, adapter = _load_dataset(
+                params,
+                limit=resolved_limit,
+                start_date="2010-01-01",
+            )
+        if df.empty:
+            raise ApiNotFoundError(f"No data for {params['ticker']}")
+
+        signal_kwargs: dict[str, Any] = {}
+        for key in (
+            "volume_mode",
+            "structure_mode",
+            "disable_rr",
+            "disable_volume",
+            "disable_trend",
+            "rsi_enabled",
+            "rsi_trend_confirmation_only",
+            "atr_enabled",
+            "atr_min_percentile",
+            "lookback_window",
+            "max_holding_candles",
+            "train_ratio",
+        ):
+            if key in payload:
+                signal_kwargs[key] = payload[key]
+
+        risk_params = _resolve_contract_risk_params(adapter, params["ticker"], params["board"])
+        signal_kwargs.update(risk_params)
+
+        stats, _ = evaluate_model(
+            df=df,
+            deposit=params["deposit"],
+            model=model,
+            signal_kwargs=signal_kwargs or None,
+            walk_forward=True,
+            monte_carlo_simulations=monte_carlo_simulations,
+            debug_filters=False,
+            adaptive_regime=adaptive_regime,
         )
-    if df.empty:
-        raise ApiNotFoundError(f"No data for {params['ticker']}")
 
-    signal_kwargs: dict[str, Any] = {}
-    for key in (
-        "volume_mode",
-        "structure_mode",
-        "disable_rr",
-        "disable_volume",
-        "disable_trend",
-        "rsi_enabled",
-        "rsi_trend_confirmation_only",
-        "atr_enabled",
-        "atr_min_percentile",
-        "lookback_window",
-        "max_holding_candles",
-        "train_ratio",
-    ):
-        if key in payload:
-            signal_kwargs[key] = payload[key]
+        test_stats = stats.get("test", {}) or {}
+        kelly_percent = calculate_kelly_criterion(
+            winrate=float(test_stats.get("winrate", 0.0) or 0.0),
+            avg_win=float(test_stats.get("avg_win", 0.0) or 0.0),
+            avg_loss=float(test_stats.get("avg_loss", 0.0) or 0.0),
+        )
 
-    risk_params = _resolve_contract_risk_params(adapter, params["ticker"], params["board"])
-    signal_kwargs.update(risk_params)
+        regime_series = classify_market_regime(_with_atr(df))
+        regime_timeline = _serialize_regime_timeline(regime_series)
 
-    stats, _ = evaluate_model(
-        df=df,
-        deposit=params["deposit"],
-        model=model,
-        signal_kwargs=signal_kwargs or None,
-        walk_forward=True,
-        monte_carlo_simulations=monte_carlo_simulations,
-        debug_filters=False,
-        adaptive_regime=adaptive_regime,
-    )
+        if len(df) < 2:
+            boundary = str(df.index[0]) if len(df.index) > 0 else ""
+            train_period = {"start": boundary, "end": boundary}
+            test_period = {"start": boundary, "end": boundary}
+        else:
+            train_ratio = _coerce_float(signal_kwargs.get("train_ratio", 0.7), default=0.7, min_value=0.1, max_value=0.9)
+            split_idx = int(len(df) * train_ratio)
+            split_idx = max(1, min(split_idx, len(df) - 1))
+            train_period = {"start": str(df.index[0]), "end": str(df.index[split_idx - 1])}
+            test_period = {"start": str(df.index[split_idx]), "end": str(df.index[-1])}
 
-    test_stats = stats.get("test", {}) or {}
-    kelly_percent = calculate_kelly_criterion(
-        winrate=float(test_stats.get("winrate", 0.0) or 0.0),
-        avg_win=float(test_stats.get("avg_win", 0.0) or 0.0),
-        avg_loss=float(test_stats.get("avg_loss", 0.0) or 0.0),
-    )
-
-    regime_series = classify_market_regime(_with_atr(df))
-    regime_timeline = _serialize_regime_timeline(regime_series)
-
-    if len(df) < 2:
-        boundary = str(df.index[0]) if len(df.index) > 0 else ""
-        train_period = {"start": boundary, "end": boundary}
-        test_period = {"start": boundary, "end": boundary}
-    else:
-        train_ratio = _coerce_float(signal_kwargs.get("train_ratio", 0.7), default=0.7, min_value=0.1, max_value=0.9)
-        split_idx = int(len(df) * train_ratio)
-        split_idx = max(1, min(split_idx, len(df) - 1))
-        train_period = {"start": str(df.index[0]), "end": str(df.index[split_idx - 1])}
-        test_period = {"start": str(df.index[split_idx]), "end": str(df.index[-1])}
-
-    return _json_safe({
-        "ticker": params["ticker"],
-        "exchange": params["exchange"],
-        "timeframe": params["timeframe"],
-        "engine": params["engine"],
-        "market": params["market"],
-        "board": params["board"],
-        "model": params["model_name"],
-        "data_points": len(df),
-        "period": {"start": str(df.index[0]), "end": str(df.index[-1])},
-        "train_period": train_period,
-        "test_period": test_period,
-        "train": stats.get("train", {}),
-        "test": test_stats,
-        "robustness": {
-            "pf_train": _to_float_or_none(stats.get("pf_train")),
-            "pf_test": _to_float_or_none(stats.get("pf_test")),
-            "maxdd_test": _to_float_or_none(stats.get("maxdd_test")),
-            "stability_ratio": _to_float_or_none(stats.get("stability_ratio")),
-            "unstable": bool(stats.get("unstable", False)),
-            "unstable_oos": bool(stats.get("unstable_oos", False)),
-            "overfit": bool(stats.get("overfit", False)),
-            "robustness_score": _to_float_or_none(stats.get("robustness_score")),
-        },
-        "market_regime_performance": stats.get("market_regime_performance", {}),
-        "regime_timeline": regime_timeline,
-        "monte_carlo": stats.get("monte_carlo"),
-        "risk": {
-            "risk_of_ruin": _to_float_or_none(stats.get("risk_of_ruin")),
-            "kelly_percent": round(float(kelly_percent), 2),
-        },
-        "admission": stats.get("admission", {}),
-        "edge_found": bool(stats.get("edge_found", False)),
-        "enabled_regimes": stats.get("enabled_regimes", []),
-        "disabled_regimes": stats.get("disabled_regimes", {}),
-        "train_regime_performance": stats.get("train_regime_performance", {}),
-    })
+        response_payload = {
+            "ticker": params["ticker"],
+            "exchange": params["exchange"],
+            "timeframe": params["timeframe"],
+            "engine": params["engine"],
+            "market": params["market"],
+            "board": params["board"],
+            "model": params["model_name"],
+            "data_points": len(df),
+            "period": {"start": str(df.index[0]), "end": str(df.index[-1])},
+            "train_period": train_period,
+            "test_period": test_period,
+            "train": stats.get("train", {}),
+            "test": test_stats,
+            "robustness": {
+                "pf_train": _to_float_or_none(stats.get("pf_train")),
+                "pf_test": _to_float_or_none(stats.get("pf_test")),
+                "maxdd_test": _to_float_or_none(stats.get("maxdd_test")),
+                "stability_ratio": _to_float_or_none(stats.get("stability_ratio")),
+                "unstable": bool(stats.get("unstable", False)),
+                "unstable_oos": bool(stats.get("unstable_oos", False)),
+                "overfit": bool(stats.get("overfit", False)),
+                "robustness_score": _to_float_or_none(stats.get("robustness_score")),
+            },
+            "market_regime_performance": stats.get("market_regime_performance", {}),
+            "regime_timeline": regime_timeline,
+            "monte_carlo": stats.get("monte_carlo"),
+            "risk": {
+                "risk_of_ruin": _to_float_or_none(stats.get("risk_of_ruin")),
+                "kelly_percent": round(float(kelly_percent), 2),
+            },
+            "admission": stats.get("admission", {}),
+            "edge_found": bool(stats.get("edge_found", False)),
+            "enabled_regimes": stats.get("enabled_regimes", []),
+            "disabled_regimes": stats.get("disabled_regimes", {}),
+            "train_regime_performance": stats.get("train_regime_performance", {}),
+        }
+        _finish_system_run_success(
+            run_context=run_context,
+            run_id=run_id,
+            result_summary={
+                "edge_found": bool(response_payload["edge_found"]),
+                "robustness_score": _to_float_or_none(response_payload["robustness"].get("robustness_score")),
+                "risk_of_ruin": _to_float_or_none(response_payload["risk"].get("risk_of_ruin")),
+            },
+            artifacts={
+                "robustness": response_payload,
+                "regime_timeline": {"items": response_payload["regime_timeline"]},
+                "train_stats": response_payload["train"],
+                "test_stats": response_payload["test"],
+            },
+        )
+        return _json_safe(response_payload)
+    except Exception as error:
+        _finish_system_run_failure(run_context=run_context, run_id=run_id, error_text=str(error))
+        raise
 
 
 def build_signal_response(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1192,18 +1356,24 @@ def _validate_trade_plan(signal_payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ensure_system_user(session: Session, *, user_email: str) -> User:
-    repo = UserPostgresRepository(session)
+    user_repo = UserPostgresRepository(session)
+    portfolio_repo = PortfolioPostgresRepository(session)
     normalized_email = str(user_email or DEFAULT_SYSTEM_USER_EMAIL).strip().lower() or DEFAULT_SYSTEM_USER_EMAIL
-    existing = repo.get_by_email(normalized_email)
+    existing = user_repo.get_by_email(normalized_email)
     if existing is not None:
+        if existing.id is not None:
+            portfolio_repo.ensure_for_owner(owner_user_id=int(existing.id))
         return existing
-    return repo.add(
+    created = user_repo.add(
         User(
             email=normalized_email,
             password_hash=DEFAULT_SYSTEM_USER_PASSWORD_HASH,
             is_active=True,
         )
     )
+    if created.id is not None:
+        portfolio_repo.ensure_for_owner(owner_user_id=int(created.id))
+    return created
 
 
 def _normalize_system_config(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1268,6 +1438,198 @@ def _serialize_trading_system(system: TradingSystem, *, version_repo: TradingSys
         "created_at": str(system.created_at) if system.created_at is not None else None,
         "updated_at": str(system.updated_at) if system.updated_at is not None else None,
     }
+
+
+def _serialize_portfolio(portfolio: Portfolio) -> dict[str, Any]:
+    return {
+        "id": int(portfolio.id) if portfolio.id is not None else None,
+        "owner_user_id": int(portfolio.owner_user_id),
+        "balance": float(portfolio.balance),
+        "currency": str(portfolio.currency),
+        "is_active": bool(portfolio.is_active),
+        "created_at": str(portfolio.created_at) if portfolio.created_at is not None else None,
+        "updated_at": str(portfolio.updated_at) if portfolio.updated_at is not None else None,
+    }
+
+
+def _serialize_system_run(run: Any) -> dict[str, Any]:
+    request_json = getattr(run, "request_json", None)
+    result_summary_json = getattr(run, "result_summary_json", None)
+    return {
+        "id": int(run.id) if getattr(run, "id", None) is not None else None,
+        "owner_user_id": int(run.owner_user_id),
+        "system_id": int(run.system_id),
+        "portfolio_id": int(run.portfolio_id) if getattr(run, "portfolio_id", None) is not None else None,
+        "portfolio_balance_snapshot": _to_float_or_none(getattr(run, "portfolio_balance_snapshot", None)),
+        "system_version_id": int(run.system_version_id) if getattr(run, "system_version_id", None) is not None else None,
+        "run_type": str(getattr(run, "run_type", "")),
+        "status": str(getattr(run, "status", "")),
+        "request_json": _json_safe(request_json) if request_json is not None else None,
+        "result_summary_json": _json_safe(result_summary_json) if result_summary_json is not None else None,
+        "error_text": str(getattr(run, "error_text", "") or ""),
+        "started_at": str(getattr(run, "started_at", "") or ""),
+        "finished_at": str(getattr(run, "finished_at", "") or ""),
+        "created_at": str(getattr(run, "created_at", "") or ""),
+    }
+
+
+def _serialize_run_artifact(artifact: Any) -> dict[str, Any]:
+    return {
+        "id": int(artifact.id) if getattr(artifact, "id", None) is not None else None,
+        "owner_user_id": int(artifact.owner_user_id),
+        "run_id": int(artifact.run_id),
+        "system_id": int(artifact.system_id),
+        "system_version_id": int(artifact.system_version_id) if getattr(artifact, "system_version_id", None) is not None else None,
+        "artifact_type": str(getattr(artifact, "artifact_type", "")),
+        "payload_json": _to_json_object(getattr(artifact, "payload_json", None)),
+        "created_at": str(getattr(artifact, "created_at", "") or ""),
+    }
+
+
+def _resolve_system_run_context(payload: dict[str, Any], *, run_type: str) -> dict[str, Any] | None:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        return None
+
+    body = payload or {}
+    if "system_id" not in body and "user_email" not in body:
+        return None
+
+    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    raw_system_id = body.get("system_id")
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        portfolio_repo = PortfolioPostgresRepository(session)
+        system_repo = TradingSystemPostgresRepository(session)
+        version_repo = TradingSystemVersionPostgresRepository(session)
+
+        system = None
+        if raw_system_id is not None:
+            try:
+                system_id = int(raw_system_id)
+            except (TypeError, ValueError) as error:
+                raise ApiValidationError("system_id must be integer") from error
+            system = system_repo.get_by_id(system_id)
+            if system is None or system.id is None or int(system.owner_user_id) != int(user.id):
+                raise ApiNotFoundError("System not found")
+        else:
+            system = system_repo.get_current(owner_user_id=int(user.id))
+
+        portfolio = portfolio_repo.ensure_for_owner(owner_user_id=int(user.id))
+        system_id: int | None = None
+        system_version_id: int | None = None
+        if system is not None and system.id is not None:
+            system_id = int(system.id)
+            version = version_repo.get_current(system_id=system_id)
+            if version is not None and version.id is not None:
+                system_version_id = int(version.id)
+
+        return {
+            "run_type": str(run_type).strip().lower() or "unknown",
+            "owner_user_id": int(user.id),
+            "system_id": system_id,
+            "system_version_id": system_version_id,
+            "portfolio_id": int(portfolio.id) if portfolio.id is not None else None,
+            "portfolio_balance_snapshot": float(portfolio.balance),
+        }
+
+
+def _start_system_run(
+    run_context: dict[str, Any] | None,
+    *,
+    run_type: str,
+    request_payload: dict[str, Any],
+) -> int | None:
+    if not run_context:
+        return None
+    system_id = run_context.get("system_id")
+    owner_user_id = run_context.get("owner_user_id")
+    if system_id is None or owner_user_id is None:
+        return None
+
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        return None
+    with session_scope(session_factory) as session:
+        run_repo = TradingSystemRunPostgresRepository(session)
+        run = run_repo.start(
+            owner_user_id=int(owner_user_id),
+            system_id=int(system_id),
+            portfolio_id=_to_int_or_none(run_context.get("portfolio_id")),
+            portfolio_balance_snapshot=_to_float_or_none(run_context.get("portfolio_balance_snapshot")),
+            run_type=str(run_type),
+            system_version_id=_to_int_or_none(run_context.get("system_version_id")),
+            request_json=_to_json_object(request_payload),
+        )
+        return int(run.id) if run.id is not None else None
+
+
+def _finish_system_run_success(
+    *,
+    run_context: dict[str, Any] | None,
+    run_id: int | None,
+    result_summary: dict[str, Any] | None,
+    artifacts: dict[str, Any] | None = None,
+) -> None:
+    if not run_context or run_id is None:
+        return
+
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        return
+
+    with session_scope(session_factory) as session:
+        run_repo = TradingSystemRunPostgresRepository(session)
+        artifact_repo = TradingSystemRunArtifactPostgresRepository(session)
+        run_repo.update_status(
+            int(run_id),
+            status="done",
+            result_summary_json=_to_json_object(result_summary),
+        )
+
+        owner_user_id = _to_int_or_none(run_context.get("owner_user_id"))
+        system_id = _to_int_or_none(run_context.get("system_id"))
+        if owner_user_id is None or system_id is None:
+            return
+
+        for artifact_type, artifact_payload in (artifacts or {}).items():
+            artifact_repo.upsert_by_run_type(
+                TradingSystemRunArtifact(
+                    owner_user_id=int(owner_user_id),
+                    run_id=int(run_id),
+                    system_id=int(system_id),
+                    system_version_id=_to_int_or_none(run_context.get("system_version_id")),
+                    artifact_type=str(artifact_type),
+                    payload_json=_to_json_object(artifact_payload),
+                )
+            )
+
+
+def _finish_system_run_failure(
+    *,
+    run_context: dict[str, Any] | None,
+    run_id: int | None,
+    error_text: str,
+) -> None:
+    if not run_context or run_id is None:
+        return
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        return
+    with session_scope(session_factory) as session:
+        run_repo = TradingSystemRunPostgresRepository(session)
+        run_repo.update_status(
+            int(run_id),
+            status="failed",
+            error_text=str(error_text or "").strip() or "unknown error",
+        )
+
+
+def _to_json_object(value: Any) -> dict[str, Any]:
+    safe = _json_safe(value)
+    if isinstance(safe, dict):
+        return safe
+    return {"value": safe}
 
 
 def _to_float_or_none(value: Any) -> float | None:

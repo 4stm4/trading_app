@@ -21,7 +21,11 @@ from services.api_service import (
     build_moex_instruments_response,
     build_models_response,
     build_optimize_response,
+    build_portfolio_response,
+    build_portfolio_update_response,
     build_signal_response,
+    build_system_run_artifacts_response,
+    build_system_runs_response,
     build_system_create_response,
     build_system_set_current_response,
     build_system_update_config_response,
@@ -96,6 +100,85 @@ def update_system_config(system_id: int, payload: dict[str, Any] | None = Body(d
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
         logger.exception("Error updating system config")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.get("/api/portfolio")
+def portfolio(user_email: str | None = Query(default=None, max_length=255)):
+    try:
+        return build_portfolio_response({"user_email": user_email} if user_email else {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading portfolio")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.put("/api/portfolio")
+def update_portfolio(payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_portfolio_update_response(payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error updating portfolio")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.get("/api/systems/{system_id}/runs")
+def system_runs(
+    system_id: int,
+    user_email: str | None = Query(default=None, max_length=255),
+    run_type: str | None = Query(default=None, max_length=64),
+    status: str | None = Query(default=None, max_length=64),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    try:
+        payload: dict[str, Any] = {"limit": limit}
+        if user_email:
+            payload["user_email"] = user_email
+        if run_type:
+            payload["run_type"] = run_type
+        if status:
+            payload["status"] = status
+        return build_system_runs_response(system_id, payload)
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading system runs")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.get("/api/system-runs/{run_id}/artifacts")
+def system_run_artifacts(
+    run_id: int,
+    user_email: str | None = Query(default=None, max_length=255),
+    artifact_type: str | None = Query(default=None, max_length=64),
+    limit: int = Query(default=50, ge=1, le=500),
+):
+    try:
+        payload: dict[str, Any] = {"limit": limit}
+        if user_email:
+            payload["user_email"] = user_email
+        if artifact_type:
+            payload["artifact_type"] = artifact_type
+        return build_system_run_artifacts_response(run_id, payload)
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading run artifacts")
         return JSONResponse(
             status_code=500,
             content={"error": "Internal error", "message": str(error)},
