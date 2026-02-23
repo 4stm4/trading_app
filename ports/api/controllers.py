@@ -7,11 +7,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Header, Query
 from fastapi.responses import JSONResponse
 
 from services.api_service import (
     ApiServiceError,
+    build_auth_login_response,
+    build_auth_me_response,
+    build_auth_register_response,
     build_backtest_response,
     build_candles_response,
     build_dashboard_backtest_response,
@@ -30,6 +33,7 @@ from services.api_service import (
     build_system_set_current_response,
     build_system_update_config_response,
     build_systems_response,
+    resolve_authenticated_user_email,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +42,56 @@ router = APIRouter()
 
 def _service_error(error: ApiServiceError) -> JSONResponse:
     return JSONResponse(status_code=error.status_code, content={"error": str(error)})
+
+
+def _with_auth_email(payload: dict[str, Any] | None, authorization: str | None) -> dict[str, Any]:
+    body = dict(payload or {})
+    auth_user_email = resolve_authenticated_user_email(authorization)
+    if auth_user_email:
+        body["_auth_user_email"] = auth_user_email
+    return body
+
+
+@router.post("/api/auth/register")
+def auth_register(payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_auth_register_response(payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error registering user")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.post("/api/auth/login")
+def auth_login(payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_auth_login_response(payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error logging in user")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.get("/api/auth/me")
+def auth_me(authorization: str | None = Header(default=None)):
+    try:
+        return build_auth_me_response(_with_auth_email({}, authorization))
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading auth profile")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
 
 
 @router.get("/api/health")
@@ -51,9 +105,15 @@ def models():
 
 
 @router.get("/api/systems")
-def systems(user_email: str | None = Query(default=None, max_length=255)):
+def systems(
+    user_email: str | None = Query(default=None, max_length=255),
+    authorization: str | None = Header(default=None),
+):
     try:
-        return build_systems_response({"user_email": user_email} if user_email else {})
+        payload: dict[str, Any] = {}
+        if user_email:
+            payload["user_email"] = user_email
+        return build_systems_response(_with_auth_email(payload, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -65,9 +125,9 @@ def systems(user_email: str | None = Query(default=None, max_length=255)):
 
 
 @router.post("/api/systems")
-def create_system(payload: dict[str, Any] | None = Body(default=None)):
+def create_system(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_system_create_response(payload or {})
+        return build_system_create_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -79,9 +139,9 @@ def create_system(payload: dict[str, Any] | None = Body(default=None)):
 
 
 @router.post("/api/systems/current")
-def set_current_system(payload: dict[str, Any] | None = Body(default=None)):
+def set_current_system(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_system_set_current_response(payload or {})
+        return build_system_set_current_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -93,9 +153,13 @@ def set_current_system(payload: dict[str, Any] | None = Body(default=None)):
 
 
 @router.put("/api/systems/{system_id}/config")
-def update_system_config(system_id: int, payload: dict[str, Any] | None = Body(default=None)):
+def update_system_config(
+    system_id: int,
+    payload: dict[str, Any] | None = Body(default=None),
+    authorization: str | None = Header(default=None),
+):
     try:
-        return build_system_update_config_response(system_id, payload or {})
+        return build_system_update_config_response(system_id, _with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -107,9 +171,15 @@ def update_system_config(system_id: int, payload: dict[str, Any] | None = Body(d
 
 
 @router.get("/api/portfolio")
-def portfolio(user_email: str | None = Query(default=None, max_length=255)):
+def portfolio(
+    user_email: str | None = Query(default=None, max_length=255),
+    authorization: str | None = Header(default=None),
+):
     try:
-        return build_portfolio_response({"user_email": user_email} if user_email else {})
+        payload: dict[str, Any] = {}
+        if user_email:
+            payload["user_email"] = user_email
+        return build_portfolio_response(_with_auth_email(payload, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -121,9 +191,9 @@ def portfolio(user_email: str | None = Query(default=None, max_length=255)):
 
 
 @router.put("/api/portfolio")
-def update_portfolio(payload: dict[str, Any] | None = Body(default=None)):
+def update_portfolio(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_portfolio_update_response(payload or {})
+        return build_portfolio_update_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -141,6 +211,7 @@ def system_runs(
     run_type: str | None = Query(default=None, max_length=64),
     status: str | None = Query(default=None, max_length=64),
     limit: int = Query(default=100, ge=1, le=500),
+    authorization: str | None = Header(default=None),
 ):
     try:
         payload: dict[str, Any] = {"limit": limit}
@@ -150,7 +221,7 @@ def system_runs(
             payload["run_type"] = run_type
         if status:
             payload["status"] = status
-        return build_system_runs_response(system_id, payload)
+        return build_system_runs_response(system_id, _with_auth_email(payload, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -167,6 +238,7 @@ def system_run_artifacts(
     user_email: str | None = Query(default=None, max_length=255),
     artifact_type: str | None = Query(default=None, max_length=64),
     limit: int = Query(default=50, ge=1, le=500),
+    authorization: str | None = Header(default=None),
 ):
     try:
         payload: dict[str, Any] = {"limit": limit}
@@ -174,7 +246,7 @@ def system_run_artifacts(
             payload["user_email"] = user_email
         if artifact_type:
             payload["artifact_type"] = artifact_type
-        return build_system_run_artifacts_response(run_id, payload)
+        return build_system_run_artifacts_response(run_id, _with_auth_email(payload, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -242,9 +314,9 @@ def candles(
 
 
 @router.post("/api/signal")
-def signal(payload: dict[str, Any] | None = Body(default=None)):
+def signal(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_signal_response(payload or {})
+        return build_signal_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -256,9 +328,9 @@ def signal(payload: dict[str, Any] | None = Body(default=None)):
 
 
 @router.post("/api/backtest")
-def backtest(payload: dict[str, Any] | None = Body(default=None)):
+def backtest(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_backtest_response(payload or {})
+        return build_backtest_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -311,9 +383,9 @@ def dashboard_market(
 
 
 @router.post("/api/dashboard/backtest")
-def dashboard_backtest(payload: dict[str, Any] | None = Body(default=None)):
+def dashboard_backtest(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_dashboard_backtest_response(payload or {})
+        return build_dashboard_backtest_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -325,9 +397,9 @@ def dashboard_backtest(payload: dict[str, Any] | None = Body(default=None)):
 
 
 @router.post("/api/dashboard/robustness")
-def dashboard_robustness(payload: dict[str, Any] | None = Body(default=None)):
+def dashboard_robustness(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_dashboard_robustness_response(payload or {})
+        return build_dashboard_robustness_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
@@ -339,9 +411,9 @@ def dashboard_robustness(payload: dict[str, Any] | None = Body(default=None)):
 
 
 @router.post("/api/optimize")
-def optimize(payload: dict[str, Any] | None = Body(default=None)):
+def optimize(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
     try:
-        return build_optimize_response(payload or {})
+        return build_optimize_response(_with_auth_email(payload or {}, authorization))
     except ApiServiceError as error:
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback

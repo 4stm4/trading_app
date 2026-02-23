@@ -47,14 +47,22 @@ from services.strategy_engine import (
     run_backtest,
 )
 from services.strategy_engine.indicators import add_indicators
+from services.auth_security import (
+    TOKEN_TTL_SECONDS,
+    hash_password,
+    issue_access_token,
+    parse_bearer_token,
+    resolve_user_email_from_token,
+    verify_password,
+)
 
 
 logger = logging.getLogger(__name__)
 _DB_SESSION_FACTORY: sessionmaker[Session] | None = None
 _DB_SESSION_FACTORY_INIT = False
 _DB_SESSION_FACTORY_URL: str | None = None
-DEFAULT_SYSTEM_USER_EMAIL = "system@local"
-DEFAULT_SYSTEM_USER_PASSWORD_HASH = "local-dev-user"
+DEFAULT_GUEST_PORTFOLIO_BALANCE = 100000.0
+DEFAULT_GUEST_PORTFOLIO_CURRENCY = "RUB"
 
 
 class ApiServiceError(Exception):
@@ -67,6 +75,14 @@ class ApiValidationError(ApiServiceError):
 
 class ApiNotFoundError(ApiServiceError):
     status_code = 404
+
+
+class ApiUnauthorizedError(ApiServiceError):
+    status_code = 401
+
+
+class ApiConflictError(ApiServiceError):
+    status_code = 409
 
 
 def build_health_response() -> dict[str, Any]:
@@ -94,13 +110,95 @@ def build_models_response() -> dict[str, Any]:
     return {"models": models_info, "count": len(models_info)}
 
 
+def build_auth_register_response(payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    email = _normalize_email(payload.get("email"))
+    if not email:
+        raise ApiValidationError("email is required")
+    _validate_email(email)
+    password = str(payload.get("password") or "")
+    _validate_password(password)
+
+    with session_scope(session_factory) as session:
+        user_repo = UserPostgresRepository(session)
+        portfolio_repo = PortfolioPostgresRepository(session)
+        existing = user_repo.get_by_email(email)
+        if existing is not None:
+            raise ApiConflictError("User already exists")
+
+        user = user_repo.add(
+            User(
+                email=email,
+                password_hash=hash_password(password),
+                is_active=True,
+            )
+        )
+        if user.id is not None:
+            portfolio_repo.ensure_for_owner(owner_user_id=int(user.id))
+
+        return _build_auth_response(user)
+
+
+def build_auth_login_response(payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    email = _normalize_email(payload.get("email"))
+    if not email:
+        raise ApiValidationError("email is required")
+    _validate_email(email)
+    password = str(payload.get("password") or "")
+    if not password:
+        raise ApiValidationError("password is required")
+
+    with session_scope(session_factory) as session:
+        user_repo = UserPostgresRepository(session)
+        user = user_repo.get_by_email(email)
+        if user is None or not verify_password(password, user.password_hash):
+            raise ApiUnauthorizedError("Invalid credentials")
+        if not bool(user.is_active):
+            raise ApiUnauthorizedError("User is inactive")
+        return _build_auth_response(user)
+
+
+def build_auth_me_response(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    user_email = _extract_user_email(payload or {}, required=True)
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        return {"user": _serialize_user(user)}
+
+
+def resolve_authenticated_user_email(authorization: str | None) -> str | None:
+    token = parse_bearer_token(authorization)
+    if token is None:
+        return None
+    user_email = resolve_user_email_from_token(token)
+    if user_email is None:
+        raise ApiUnauthorizedError("Invalid or expired token")
+    return user_email
+
+
 def build_systems_response(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     session_factory = _get_db_session_factory()
     if session_factory is None:
         raise ApiServiceError("Database is not configured")
 
     body = payload or {}
-    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(body, required=False)
+    if user_email is None:
+        return {
+            "owner_user_id": None,
+            "current_system_id": None,
+            "systems": [],
+        }
     with session_scope(session_factory) as session:
         user = _ensure_system_user(session, user_email=user_email)
         system_repo = TradingSystemPostgresRepository(session)
@@ -129,7 +227,7 @@ def build_system_create_response(payload: dict[str, Any]) -> dict[str, Any]:
     if not name:
         raise ApiValidationError("name is required")
 
-    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(payload, required=True)
     model_key = str(payload.get("model") or "balanced").strip().lower() or "balanced"
     make_current = _to_bool(payload.get("make_current"), default=False)
     config = _normalize_system_config(payload.get("config") or {})
@@ -190,7 +288,7 @@ def build_system_update_config_response(system_id: int, payload: dict[str, Any])
     if session_factory is None:
         raise ApiServiceError("Database is not configured")
 
-    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(payload, required=True)
     with session_scope(session_factory) as session:
         user = _ensure_system_user(session, user_email=user_email)
         model_repo = TradingModelPostgresRepository(session)
@@ -245,7 +343,7 @@ def build_system_set_current_response(payload: dict[str, Any]) -> dict[str, Any]
     if session_factory is None:
         raise ApiServiceError("Database is not configured")
 
-    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(payload, required=True)
     system_id = payload.get("system_id")
     system_name = str(payload.get("name") or "").strip()
     if system_id is None and not system_name:
@@ -282,7 +380,20 @@ def build_portfolio_response(payload: dict[str, Any] | None = None) -> dict[str,
         raise ApiServiceError("Database is not configured")
 
     body = payload or {}
-    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(body, required=False)
+    if user_email is None:
+        return {
+            "owner_user_id": None,
+            "portfolio": {
+                "id": None,
+                "owner_user_id": None,
+                "balance": float(DEFAULT_GUEST_PORTFOLIO_BALANCE),
+                "currency": DEFAULT_GUEST_PORTFOLIO_CURRENCY,
+                "is_active": False,
+                "created_at": None,
+                "updated_at": None,
+            },
+        }
     with session_scope(session_factory) as session:
         user = _ensure_system_user(session, user_email=user_email)
         portfolio_repo = PortfolioPostgresRepository(session)
@@ -298,7 +409,7 @@ def build_portfolio_update_response(payload: dict[str, Any]) -> dict[str, Any]:
     if session_factory is None:
         raise ApiServiceError("Database is not configured")
 
-    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(payload, required=True)
     raw_balance = payload.get("balance", payload.get("deposit"))
     if raw_balance is None:
         raise ApiValidationError("balance is required")
@@ -332,7 +443,7 @@ def build_system_runs_response(system_id: int, payload: dict[str, Any] | None = 
         raise ApiServiceError("Database is not configured")
 
     body = payload or {}
-    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(body, required=True)
     run_type = str(body.get("run_type") or "").strip().lower() or None
     status = str(body.get("status") or "").strip().lower() or None
     limit = _coerce_int(body.get("limit", 100), default=100, min_value=1, max_value=500)
@@ -367,7 +478,7 @@ def build_system_run_artifacts_response(run_id: int, payload: dict[str, Any] | N
         raise ApiServiceError("Database is not configured")
 
     body = payload or {}
-    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(body, required=True)
     artifact_type = str(body.get("artifact_type") or "").strip().lower() or None
     limit = _coerce_int(body.get("limit", 50), default=50, min_value=1, max_value=500)
 
@@ -1355,25 +1466,60 @@ def _validate_trade_plan(signal_payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_user_email(payload: dict[str, Any] | None, *, required: bool) -> str | None:
+    body = payload or {}
+    auth_user_email = _normalize_email(body.get("_auth_user_email"))
+    request_user_email = _normalize_email(body.get("user_email"))
+    if auth_user_email and request_user_email and auth_user_email != request_user_email:
+        raise ApiUnauthorizedError("Authenticated user mismatch")
+    normalized_email = auth_user_email or request_user_email
+    if normalized_email:
+        return normalized_email
+    if required:
+        raise ApiUnauthorizedError("Authentication required")
+    return None
+
+
 def _ensure_system_user(session: Session, *, user_email: str) -> User:
     user_repo = UserPostgresRepository(session)
     portfolio_repo = PortfolioPostgresRepository(session)
-    normalized_email = str(user_email or DEFAULT_SYSTEM_USER_EMAIL).strip().lower() or DEFAULT_SYSTEM_USER_EMAIL
+    normalized_email = _normalize_email(user_email)
+    if not normalized_email:
+        raise ApiUnauthorizedError("Authentication required")
     existing = user_repo.get_by_email(normalized_email)
-    if existing is not None:
-        if existing.id is not None:
-            portfolio_repo.ensure_for_owner(owner_user_id=int(existing.id))
-        return existing
-    created = user_repo.add(
-        User(
-            email=normalized_email,
-            password_hash=DEFAULT_SYSTEM_USER_PASSWORD_HASH,
-            is_active=True,
-        )
-    )
-    if created.id is not None:
-        portfolio_repo.ensure_for_owner(owner_user_id=int(created.id))
-    return created
+    if existing is None:
+        raise ApiUnauthorizedError("User not found")
+    if existing.id is not None:
+        portfolio_repo.ensure_for_owner(owner_user_id=int(existing.id))
+    return existing
+
+
+def _normalize_email(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _validate_password(password: str) -> None:
+    raw_password = str(password or "")
+    if len(raw_password) < 8:
+        raise ApiValidationError("password must contain at least 8 characters")
+
+
+def _validate_email(email: str) -> None:
+    normalized = _normalize_email(email)
+    if not normalized or "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+        raise ApiValidationError("invalid email format")
+
+
+def _build_auth_response(user: User) -> dict[str, Any]:
+    if user.id is None:
+        raise ApiServiceError("Failed to load user")
+    token = issue_access_token(user_email=str(user.email))
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": int(TOKEN_TTL_SECONDS),
+        "user": _serialize_user(user),
+    }
 
 
 def _normalize_system_config(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1452,6 +1598,16 @@ def _serialize_portfolio(portfolio: Portfolio) -> dict[str, Any]:
     }
 
 
+def _serialize_user(user: User) -> dict[str, Any]:
+    return {
+        "id": int(user.id) if user.id is not None else None,
+        "email": str(user.email),
+        "is_active": bool(user.is_active),
+        "created_at": str(user.created_at) if user.created_at is not None else None,
+        "updated_at": str(user.updated_at) if user.updated_at is not None else None,
+    }
+
+
 def _serialize_system_run(run: Any) -> dict[str, Any]:
     request_json = getattr(run, "request_json", None)
     result_summary_json = getattr(run, "result_summary_json", None)
@@ -1495,7 +1651,9 @@ def _resolve_system_run_context(payload: dict[str, Any], *, run_type: str) -> di
     if "system_id" not in body and "user_email" not in body:
         return None
 
-    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    user_email = _extract_user_email(body, required=False)
+    if user_email is None:
+        return None
     raw_system_id = body.get("system_id")
     with session_scope(session_factory) as session:
         user = _ensure_system_user(session, user_email=user_email)
