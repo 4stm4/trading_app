@@ -70,6 +70,68 @@ class MarketCandlePostgresRepository:
         rows: Sequence[MarketCandleTable] = self._session.scalars(stmt).all()
         return [to_entity(row) for row in rows]
 
+    def get_frame(
+        self,
+        *,
+        exchange: str,
+        engine: str,
+        market: str,
+        board: str | None,
+        symbol: str,
+        timeframe: str,
+        limit: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> pd.DataFrame:
+        stmt = select(MarketCandleTable).where(
+            MarketCandleTable.exchange == _normalize_exchange(exchange),
+            MarketCandleTable.engine == _normalize_engine(engine),
+            MarketCandleTable.market == _normalize_market(market),
+            MarketCandleTable.board == _normalize_board(board),
+            MarketCandleTable.symbol == _normalize_symbol(symbol),
+            MarketCandleTable.timeframe == _normalize_timeframe(timeframe),
+        )
+
+        start_ts = _parse_start_datetime(start_date)
+        if start_ts is not None:
+            stmt = stmt.where(MarketCandleTable.timestamp >= start_ts)
+
+        end_ts = _parse_end_datetime(end_date)
+        if end_ts is not None:
+            stmt = stmt.where(MarketCandleTable.timestamp <= end_ts)
+
+        # Keep API semantics: when limit is set, return the latest candles.
+        if limit is not None and int(limit) > 0:
+            stmt = stmt.order_by(MarketCandleTable.timestamp.desc()).limit(int(limit))
+            rows: Sequence[MarketCandleTable] = self._session.scalars(stmt).all()
+            rows = sorted(rows, key=lambda item: item.timestamp)
+        else:
+            stmt = stmt.order_by(MarketCandleTable.timestamp.asc())
+            rows = self._session.scalars(stmt).all()
+
+        if not rows:
+            return pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+
+        frame = pd.DataFrame(
+            [
+                {
+                    "timestamp": row.timestamp,
+                    "open": float(row.open),
+                    "high": float(row.high),
+                    "low": float(row.low),
+                    "close": float(row.close),
+                    "volume": float(row.volume),
+                }
+                for row in rows
+            ]
+        )
+        frame["timestamp"] = pd.to_datetime(frame["timestamp"], errors="coerce")
+        frame = frame.dropna(subset=["timestamp"])
+        frame = frame.set_index("timestamp")
+        frame = frame.sort_index()
+        frame = frame[~frame.index.duplicated(keep="last")]
+        return frame[["open", "high", "low", "close", "volume"]]
+
     def upsert_many(self, candles: list[MarketCandle]) -> tuple[int, int]:
         if not candles:
             return 0, 0
@@ -215,3 +277,25 @@ def _normalize_symbol(symbol: str) -> str:
 
 def _normalize_timeframe(timeframe: str) -> str:
     return str(timeframe or "").strip().lower()
+
+
+def _parse_start_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    parsed_ts = pd.Timestamp(parsed)
+    return parsed_ts.to_pydatetime().replace(tzinfo=None, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _parse_end_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    parsed = pd.to_datetime(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    parsed_ts = pd.Timestamp(parsed)
+    # inclusive end of day for date-only inputs
+    end_dt = parsed_ts.to_pydatetime().replace(tzinfo=None, hour=23, minute=59, second=59, microsecond=999999)
+    return end_dt

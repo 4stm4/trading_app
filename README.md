@@ -198,8 +198,8 @@ REST API расположен в `ports/api`.
 
 ## Быстрый запуск (высокоуровнево)
 - CLI: запуск из `ports.cli.trading_cli` с параметрами тикера, депозита и режима рынка.
-- API: запуск `run_api.py` и работа через HTTP endpoints.
-- Frontend: запуск `run_frontend.py` и работа через браузерный dashboard.
+- API: запуск `composites/api.py` и работа через HTTP endpoints.
+- Frontend: запуск `composites/frontend.py` и работа через браузерный dashboard.
 
 ## Backend: сборка и запуск
 ### 1. Подготовка окружения (сборка backend)
@@ -215,7 +215,7 @@ pip install -r requirements.txt
 ```bash
 cd trading_app
 source .venv/bin/activate
-python run_api.py
+python composites/api.py
 ```
 
 Backend будет доступен на `http://localhost:5000`.

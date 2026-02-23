@@ -10,6 +10,11 @@ from adapters.postgres.base import Base
 from adapters.postgres.instrument.tables import InstrumentTable  # noqa: F401
 from adapters.postgres.market_candle.tables import MarketCandleTable  # noqa: F401
 from adapters.postgres.recommended_sale.tables import RecommendedSaleTable  # noqa: F401
+from adapters.postgres.trading_model.tables import TradingModelTable  # noqa: F401
+from adapters.postgres.trading_system.tables import TradingSystemTable  # noqa: F401
+from adapters.postgres.trading_system_run.tables import TradingSystemRunTable  # noqa: F401
+from adapters.postgres.trading_system_signal.tables import TradingSystemSignalTable  # noqa: F401
+from adapters.postgres.trading_system_version.tables import TradingSystemVersionTable  # noqa: F401
 from adapters.postgres.user.tables import UserTable  # noqa: F401
 
 

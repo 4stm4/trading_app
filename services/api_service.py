@@ -4,16 +4,25 @@ Application service layer for REST API use-cases.
 
 from __future__ import annotations
 
+import logging
 import math
+import os
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from sqlalchemy.orm import Session, sessionmaker
 
 from adapters import (
     build_exchange_adapter,
     load_data_with_indicators_for_exchange,
     resolve_default_board,
+)
+from adapters.postgres import (
+    MarketCandlePostgresRepository,
+    create_postgres_engine,
+    create_session_factory,
+    session_scope,
 )
 from services.strategy_engine import (
     MODELS,
@@ -26,6 +35,13 @@ from services.strategy_engine import (
     get_model,
     run_backtest,
 )
+from services.strategy_engine.indicators import add_indicators
+
+
+logger = logging.getLogger(__name__)
+_DB_SESSION_FACTORY: sessionmaker[Session] | None = None
+_DB_SESSION_FACTORY_INIT = False
+_DB_SESSION_FACTORY_URL: str | None = None
 
 
 class ApiServiceError(Exception):
@@ -633,8 +649,29 @@ def _load_dataset(
     start_date: str | None = None,
     end_date: str | None = None,
 ):
+    adapter = _build_adapter(params)
+
+    db_df = _load_dataset_from_db(
+        params,
+        limit=limit,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if not db_df.empty:
+        logger.info(
+            "Dataset source=db ticker=%s tf=%s rows=%d",
+            params["ticker"],
+            params["timeframe"],
+            len(db_df),
+        )
+        return db_df, adapter
+
+    logger.info(
+        "Dataset source=exchange ticker=%s tf=%s (db empty)",
+        params["ticker"],
+        params["timeframe"],
+    )
     try:
-        adapter = build_exchange_adapter(params["exchange"], params["engine"], params["market"])
         df, _ = load_data_with_indicators_for_exchange(
             exchange=params["exchange"],
             ticker=params["ticker"],
@@ -648,6 +685,80 @@ def _load_dataset(
     except NotImplementedError as error:
         raise ApiValidationError(str(error)) from error
     return df, adapter
+
+
+def _build_adapter(params: dict[str, Any]):
+    try:
+        return build_exchange_adapter(params["exchange"], params["engine"], params["market"])
+    except NotImplementedError as error:
+        raise ApiValidationError(str(error)) from error
+
+
+def _load_dataset_from_db(
+    params: dict[str, Any],
+    *,
+    limit: int | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> pd.DataFrame:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        return pd.DataFrame()
+
+    try:
+        with session_scope(session_factory) as session:
+            repo = MarketCandlePostgresRepository(session)
+            frame = repo.get_frame(
+                exchange=params["exchange"],
+                engine=params["engine"],
+                market=params["market"],
+                board=params["board"],
+                symbol=params["ticker"],
+                timeframe=params["timeframe"],
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
+            )
+    except Exception:
+        logger.exception("Failed to load dataset from DB")
+        return pd.DataFrame()
+
+    if frame.empty:
+        return frame
+
+    enriched = add_indicators(frame, ma_periods=[50, 200], rsi_period=14)
+    return enriched
+
+
+def _get_db_session_factory() -> sessionmaker[Session] | None:
+    global _DB_SESSION_FACTORY, _DB_SESSION_FACTORY_INIT, _DB_SESSION_FACTORY_URL
+
+    database_url = (
+        str(os.getenv("DATABASE_URL") or "").strip()
+        or str(os.getenv("ALEMBIC_DATABASE_URL") or "").strip()
+        or str(os.getenv("AUTH_DB_URL") or "").strip()
+    )
+    if _DB_SESSION_FACTORY_INIT and database_url == (_DB_SESSION_FACTORY_URL or ""):
+        return _DB_SESSION_FACTORY
+
+    if not database_url:
+        _DB_SESSION_FACTORY_INIT = True
+        _DB_SESSION_FACTORY = None
+        _DB_SESSION_FACTORY_URL = None
+        return None
+
+    try:
+        engine = create_postgres_engine(database_url, echo=False)
+        _DB_SESSION_FACTORY = create_session_factory(engine)
+        _DB_SESSION_FACTORY_URL = database_url
+    except Exception:
+        logger.exception("Failed to initialize DB session factory")
+        _DB_SESSION_FACTORY = None
+        _DB_SESSION_FACTORY_URL = None
+    finally:
+        _DB_SESSION_FACTORY_INIT = True
+
+    return _DB_SESSION_FACTORY
 
 
 def _get_model_or_raise(model_name: str):
