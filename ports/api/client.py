@@ -158,6 +158,104 @@ class TradingSystemClient:
         response.raise_for_status()
         return response.json()
 
+    def get_dashboard_market(
+        self,
+        ticker: str,
+        timeframe: str = "1h",
+        model: str = "balanced",
+        deposit: float = 100000.0,
+        exchange: str = "moex",
+        engine: str = "stock",
+        market: str = "shares",
+        board: Optional[str] = None,
+        limit: int = 300,
+    ) -> Dict:
+        params = {
+            "ticker": ticker,
+            "exchange": exchange,
+            "timeframe": timeframe,
+            "engine": engine,
+            "market": market,
+            "model": model,
+            "deposit": deposit,
+            "limit": limit,
+        }
+        if board:
+            params["board"] = board
+
+        response = self.session.get(
+            f"{self.base_url}/api/dashboard/market",
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_dashboard_backtest(
+        self,
+        ticker: str,
+        deposit: float,
+        timeframe: str = "1h",
+        model: str = "balanced",
+        exchange: str = "moex",
+        engine: str = "stock",
+        market: str = "shares",
+        board: Optional[str] = None,
+        limit: int = 1200,
+    ) -> Dict:
+        payload = {
+            "ticker": ticker,
+            "deposit": deposit,
+            "timeframe": timeframe,
+            "model": model,
+            "exchange": exchange,
+            "engine": engine,
+            "market": market,
+            "limit": limit,
+        }
+        if board:
+            payload["board"] = board
+
+        response = self.session.post(
+            f"{self.base_url}/api/dashboard/backtest",
+            json=payload,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_dashboard_robustness(
+        self,
+        ticker: str,
+        deposit: float,
+        timeframe: str = "1h",
+        model: str = "balanced",
+        exchange: str = "moex",
+        engine: str = "stock",
+        market: str = "shares",
+        board: Optional[str] = None,
+        limit: int = 1500,
+        monte_carlo_simulations: int = 300,
+    ) -> Dict:
+        payload = {
+            "ticker": ticker,
+            "deposit": deposit,
+            "timeframe": timeframe,
+            "model": model,
+            "exchange": exchange,
+            "engine": engine,
+            "market": market,
+            "limit": limit,
+            "monte_carlo_simulations": monte_carlo_simulations,
+        }
+        if board:
+            payload["board"] = board
+
+        response = self.session.post(
+            f"{self.base_url}/api/dashboard/robustness",
+            json=payload,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def optimize(
         self,
         ticker: str,

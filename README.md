@@ -226,6 +226,25 @@ curl http://localhost:5000/api/health
 curl "http://localhost:5000/api/moex/instruments?board=TQBR&limit=5"
 ```
 
+## Миграции PostgreSQL (Alembic)
+Базовая конфигурация Alembic находится в `alembic.ini`, скрипты миграций в `alembic/versions`.
+
+### Применить миграции
+```bash
+cd trading_app
+source .venv/bin/activate
+export ALEMBIC_DATABASE_URL='postgresql+psycopg://user:password@localhost:5432/trading_app'
+alembic -c alembic.ini upgrade head
+```
+
+### Создать новую миграцию
+```bash
+cd trading_app
+source .venv/bin/activate
+export ALEMBIC_DATABASE_URL='postgresql+psycopg://user:password@localhost:5432/trading_app'
+alembic -c alembic.ini revision --autogenerate -m "add_new_field"
+```
+
 ## Производительность
 Типичные ориентиры.
 - Генерация сигнала занимает секунды.
