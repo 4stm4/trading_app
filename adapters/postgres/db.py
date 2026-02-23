@@ -38,6 +38,7 @@ def session_scope(session_factory: sessionmaker[Session]) -> Iterator[Session]:
 
 def create_schema(engine: Engine) -> None:
     create_instrument_schema(engine)
+    create_market_candle_schema(engine)
     create_recommended_sale_schema(engine)
     create_user_schema(engine)
 
@@ -58,3 +59,9 @@ def create_recommended_sale_schema(engine: Engine) -> None:
     from .recommended_sale.tables import RecommendedSaleTable
 
     Base.metadata.create_all(bind=engine, tables=[RecommendedSaleTable.__table__])
+
+
+def create_market_candle_schema(engine: Engine) -> None:
+    from .market_candle.tables import MarketCandleTable
+
+    Base.metadata.create_all(bind=engine, tables=[MarketCandleTable.__table__])

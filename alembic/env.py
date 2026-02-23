@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from adapters.postgres.base import Base
 from adapters.postgres.instrument.tables import InstrumentTable  # noqa: F401
+from adapters.postgres.market_candle.tables import MarketCandleTable  # noqa: F401
 from adapters.postgres.recommended_sale.tables import RecommendedSaleTable  # noqa: F401
 from adapters.postgres.user.tables import UserTable  # noqa: F401
 

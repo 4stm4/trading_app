@@ -245,6 +245,31 @@ export ALEMBIC_DATABASE_URL='postgresql+psycopg://user:password@localhost:5432/t
 alembic -c alembic.ini revision --autogenerate -m "add_new_field"
 ```
 
+## ETL загрузка свечей в PostgreSQL
+ETL запускается скриптом `composites/etl.py`:
+- при первом запуске грузит историю (по умолчанию `365` дней);
+- при следующих запусках догружает только новые свечи с небольшим overlap, чтобы избежать дыр в данных.
+
+Пример запуска:
+```bash
+cd trading_app
+source .venv/bin/activate
+export DATABASE_URL='postgresql+psycopg://user:password@host:5432/trading'
+python composites/etl.py \
+  --exchange moex \
+  --engine stock \
+  --market shares \
+  --board TQBR \
+  --timeframe 1h \
+  --symbols SBER,GAZP,LKOH
+```
+
+Параметры:
+- `--symbols` — список тикеров через запятую; если не задан, для MOEX берется список инструментов с биржи.
+- `--initial-lookback-days` — глубина первой загрузки.
+- `--start-date/--end-date` — ручной диапазон.
+- `--limit` — ограничение количества свечей за запрос.
+
 ## Производительность
 Типичные ориентиры.
 - Генерация сигнала занимает секунды.
