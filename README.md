@@ -2,6 +2,7 @@
 
 Структура исходников:
 - `src/backend` — backend (FastAPI, ETL, доменная логика)
+- `src/backend/_tests` — backend unit-тесты
 - `src/frontend` — frontend (React + Vite)
 
 В репозитории добавлен `docker-compose.yml` для запуска:
