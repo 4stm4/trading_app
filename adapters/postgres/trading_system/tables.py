@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..base import Base
@@ -13,6 +13,12 @@ class TradingSystemTable(Base):
     __table_args__ = (
         UniqueConstraint("owner_user_id", "name", name="uq_trading_systems_owner_name"),
         Index("ix_trading_systems_owner_active", "owner_user_id", "is_active"),
+        Index(
+            "uq_trading_systems_owner_current",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=text("is_current"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -69,6 +75,12 @@ class TradingSystemTable(Base):
         nullable=False,
         default=True,
         server_default="true",
+    )
+    is_current: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

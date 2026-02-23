@@ -17,6 +17,7 @@ class TradingSystem:
     timeframe: str = "1h"
     model_name: str = "balanced"
     is_active: bool = True
+    is_current: bool = False
     id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

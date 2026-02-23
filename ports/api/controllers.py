@@ -22,6 +22,10 @@ from services.api_service import (
     build_models_response,
     build_optimize_response,
     build_signal_response,
+    build_system_create_response,
+    build_system_set_current_response,
+    build_system_update_config_response,
+    build_systems_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,62 @@ def health_check():
 @router.get("/api/models")
 def models():
     return build_models_response()
+
+
+@router.get("/api/systems")
+def systems(user_email: str | None = Query(default=None, max_length=255)):
+    try:
+        return build_systems_response({"user_email": user_email} if user_email else {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading systems")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.post("/api/systems")
+def create_system(payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_system_create_response(payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error creating system")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.post("/api/systems/current")
+def set_current_system(payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_system_set_current_response(payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error setting current system")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.put("/api/systems/{system_id}/config")
+def update_system_config(system_id: int, payload: dict[str, Any] | None = Body(default=None)):
+    try:
+        return build_system_update_config_response(system_id, payload or {})
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error updating system config")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
 
 
 @router.get("/api/moex/instruments")

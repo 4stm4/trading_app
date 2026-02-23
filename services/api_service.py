@@ -20,10 +20,16 @@ from adapters import (
 )
 from adapters.postgres import (
     MarketCandlePostgresRepository,
+    TradingModelPostgresRepository,
+    TradingSystemPostgresRepository,
+    TradingSystemVersionPostgresRepository,
+    UserPostgresRepository,
     create_postgres_engine,
     create_session_factory,
     session_scope,
 )
+from entities.trading_system import TradingSystem
+from entities.user import User
 from services.strategy_engine import (
     MODELS,
     calculate_atr,
@@ -42,6 +48,8 @@ logger = logging.getLogger(__name__)
 _DB_SESSION_FACTORY: sessionmaker[Session] | None = None
 _DB_SESSION_FACTORY_INIT = False
 _DB_SESSION_FACTORY_URL: str | None = None
+DEFAULT_SYSTEM_USER_EMAIL = "system@local"
+DEFAULT_SYSTEM_USER_PASSWORD_HASH = "local-dev-user"
 
 
 class ApiServiceError(Exception):
@@ -79,6 +87,188 @@ def build_models_response() -> dict[str, Any]:
             "allow_range": model.allow_range,
         }
     return {"models": models_info, "count": len(models_info)}
+
+
+def build_systems_response(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    body = payload or {}
+    user_email = str(body.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        system_repo = TradingSystemPostgresRepository(session)
+        version_repo = TradingSystemVersionPostgresRepository(session)
+
+        systems = system_repo.list_by_owner(owner_user_id=int(user.id), only_active=False, limit=500)
+        current = system_repo.get_current(owner_user_id=int(user.id))
+        if current is None and systems:
+            current = system_repo.set_current(owner_user_id=int(user.id), system_id=int(systems[0].id))
+            systems = system_repo.list_by_owner(owner_user_id=int(user.id), only_active=False, limit=500)
+
+        serialized = [_serialize_trading_system(item, version_repo=version_repo) for item in systems]
+        return _json_safe({
+            "owner_user_id": int(user.id),
+            "current_system_id": int(current.id) if current is not None and current.id is not None else None,
+            "systems": serialized,
+        })
+
+
+def build_system_create_response(payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        raise ApiValidationError("name is required")
+
+    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    model_key = str(payload.get("model") or "balanced").strip().lower() or "balanced"
+    make_current = _to_bool(payload.get("make_current"), default=False)
+    config = _normalize_system_config(payload.get("config") or {})
+    timeframe = str(payload.get("timeframe") or "1h").strip().lower() or "1h"
+    exchange = str(payload.get("exchange") or "moex").strip().lower() or "moex"
+    engine = str(payload.get("engine") or "stock").strip().lower() or "stock"
+    market = str(payload.get("market") or "shares").strip().lower() or "shares"
+    board = str(payload.get("board") or "").strip().upper()
+
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        model_repo = TradingModelPostgresRepository(session)
+        system_repo = TradingSystemPostgresRepository(session)
+        version_repo = TradingSystemVersionPostgresRepository(session)
+
+        model = model_repo.get_by_key(model_key)
+        if model is None or model.id is None:
+            raise ApiValidationError(f"Unknown model: {model_key}")
+
+        saved = system_repo.upsert_by_owner_name(
+            TradingSystem(
+                owner_user_id=int(user.id),
+                name=name,
+                model_id=int(model.id),
+                model_name=model.key,
+                timeframe=timeframe,
+                exchange=exchange,
+                engine=engine,
+                market=market,
+                board=board,
+                is_active=True,
+                is_current=make_current,
+            )
+        )
+        if saved.id is None:
+            raise ApiServiceError("Failed to persist system")
+
+        version_repo.create_next(
+            system_id=int(saved.id),
+            config_json=config,
+            created_by_user_id=int(user.id),
+            make_current=True,
+        )
+
+        current = system_repo.get_current(owner_user_id=int(user.id))
+        if make_current or current is None:
+            current = system_repo.set_current(owner_user_id=int(user.id), system_id=int(saved.id))
+
+        refreshed = system_repo.get_by_id(int(saved.id)) or saved
+        return _json_safe({
+            "system": _serialize_trading_system(refreshed, version_repo=version_repo),
+            "current_system_id": int(current.id) if current is not None and current.id is not None else None,
+        })
+
+
+def build_system_update_config_response(system_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        model_repo = TradingModelPostgresRepository(session)
+        system_repo = TradingSystemPostgresRepository(session)
+        version_repo = TradingSystemVersionPostgresRepository(session)
+
+        system = system_repo.get_by_id(int(system_id))
+        if system is None or int(system.owner_user_id) != int(user.id):
+            raise ApiNotFoundError("System not found")
+
+        if "model" in payload:
+            model_key = str(payload.get("model") or "").strip().lower()
+            if not model_key:
+                raise ApiValidationError("model cannot be empty")
+            model = model_repo.get_by_key(model_key)
+            if model is None or model.id is None:
+                raise ApiValidationError(f"Unknown model: {model_key}")
+            system.model_id = int(model.id)
+            system.model_name = model.key
+
+        if "timeframe" in payload:
+            system.timeframe = str(payload.get("timeframe") or system.timeframe).strip().lower() or system.timeframe
+        if "exchange" in payload:
+            system.exchange = str(payload.get("exchange") or system.exchange).strip().lower() or system.exchange
+        if "engine" in payload:
+            system.engine = str(payload.get("engine") or system.engine).strip().lower() or system.engine
+        if "market" in payload:
+            system.market = str(payload.get("market") or system.market).strip().lower() or system.market
+        if "board" in payload:
+            system.board = str(payload.get("board") or "").strip().upper()
+
+        updated = system_repo.upsert_by_owner_name(system)
+        if updated.id is None:
+            raise ApiServiceError("Failed to update system")
+
+        config = _normalize_system_config(payload.get("config") or {})
+        version_repo.create_next(
+            system_id=int(updated.id),
+            config_json=config,
+            created_by_user_id=int(user.id),
+            make_current=True,
+        )
+
+        refreshed = system_repo.get_by_id(int(updated.id)) or updated
+        return _json_safe({
+            "system": _serialize_trading_system(refreshed, version_repo=version_repo),
+        })
+
+
+def build_system_set_current_response(payload: dict[str, Any]) -> dict[str, Any]:
+    session_factory = _get_db_session_factory()
+    if session_factory is None:
+        raise ApiServiceError("Database is not configured")
+
+    user_email = str(payload.get("user_email") or DEFAULT_SYSTEM_USER_EMAIL).strip().lower()
+    system_id = payload.get("system_id")
+    system_name = str(payload.get("name") or "").strip()
+    if system_id is None and not system_name:
+        raise ApiValidationError("system_id or name is required")
+
+    with session_scope(session_factory) as session:
+        user = _ensure_system_user(session, user_email=user_email)
+        system_repo = TradingSystemPostgresRepository(session)
+        version_repo = TradingSystemVersionPostgresRepository(session)
+
+        target = None
+        if system_id is not None:
+            target = system_repo.get_by_id(int(system_id))
+        elif system_name:
+            target = system_repo.get_by_owner_and_name(owner_user_id=int(user.id), name=system_name)
+
+        if target is None or target.id is None or int(target.owner_user_id) != int(user.id):
+            raise ApiNotFoundError("System not found")
+
+        current = system_repo.set_current(owner_user_id=int(user.id), system_id=int(target.id))
+        if current is None:
+            raise ApiServiceError("Failed to set current system")
+
+        refreshed = system_repo.get_by_id(int(current.id)) or current
+        return _json_safe({
+            "current_system_id": int(refreshed.id),
+            "system": _serialize_trading_system(refreshed, version_repo=version_repo),
+        })
 
 
 def build_moex_instruments_response(
@@ -998,6 +1188,85 @@ def _validate_trade_plan(signal_payload: dict[str, Any]) -> dict[str, Any]:
         "rr": rr,
         "confidence": confidence,
         "issues": issues,
+    }
+
+
+def _ensure_system_user(session: Session, *, user_email: str) -> User:
+    repo = UserPostgresRepository(session)
+    normalized_email = str(user_email or DEFAULT_SYSTEM_USER_EMAIL).strip().lower() or DEFAULT_SYSTEM_USER_EMAIL
+    existing = repo.get_by_email(normalized_email)
+    if existing is not None:
+        return existing
+    return repo.add(
+        User(
+            email=normalized_email,
+            password_hash=DEFAULT_SYSTEM_USER_PASSWORD_HASH,
+            is_active=True,
+        )
+    )
+
+
+def _normalize_system_config(payload: dict[str, Any]) -> dict[str, Any]:
+    source = payload or {}
+    return {
+        "deposit": _coerce_float(source.get("deposit"), default=100000.0, min_value=0.0, max_value=10_000_000_000.0),
+        "commissionBps": _coerce_float(source.get("commissionBps"), default=4.0, min_value=0.0, max_value=500.0),
+        "slippageBps": _coerce_float(source.get("slippageBps"), default=6.0, min_value=0.0, max_value=500.0),
+        "patternMinSample": _coerce_int(source.get("patternMinSample"), default=30, min_value=1, max_value=10_000),
+        "marketLimit": _coerce_int(source.get("marketLimit"), default=300, min_value=50, max_value=10_000),
+        "candidateScanLimit": _coerce_int(source.get("candidateScanLimit"), default=24, min_value=1, max_value=1000),
+        "candidateScanConcurrency": _coerce_int(
+            source.get("candidateScanConcurrency"),
+            default=4,
+            min_value=1,
+            max_value=128,
+        ),
+        "backtestLimit": _coerce_int(source.get("backtestLimit"), default=1200, min_value=100, max_value=20_000),
+        "backtestLookbackWindow": _coerce_int(
+            source.get("backtestLookbackWindow"),
+            default=300,
+            min_value=20,
+            max_value=10_000,
+        ),
+        "backtestMaxHoldingCandles": _coerce_int(
+            source.get("backtestMaxHoldingCandles"),
+            default=50,
+            min_value=1,
+            max_value=5000,
+        ),
+        "robustnessLimit": _coerce_int(source.get("robustnessLimit"), default=1500, min_value=100, max_value=20_000),
+        "monteCarloSimulations": _coerce_int(
+            source.get("monteCarloSimulations"),
+            default=300,
+            min_value=10,
+            max_value=20_000,
+        ),
+        "trainRatio": _coerce_float(source.get("trainRatio"), default=0.7, min_value=0.1, max_value=0.95),
+    }
+
+
+def _serialize_trading_system(system: TradingSystem, *, version_repo: TradingSystemVersionPostgresRepository) -> dict[str, Any]:
+    config: dict[str, Any] = {}
+    if system.id is not None:
+        current_version = version_repo.get_current(system_id=int(system.id))
+        if current_version is not None:
+            config = _normalize_system_config(current_version.config_json)
+    return {
+        "id": int(system.id) if system.id is not None else None,
+        "owner_user_id": int(system.owner_user_id),
+        "name": str(system.name),
+        "model_id": int(system.model_id) if system.model_id is not None else None,
+        "model": str(system.model_name),
+        "exchange": str(system.exchange),
+        "engine": str(system.engine),
+        "market": str(system.market),
+        "board": str(system.board),
+        "timeframe": str(system.timeframe),
+        "is_active": bool(system.is_active),
+        "is_current": bool(system.is_current),
+        "config": config,
+        "created_at": str(system.created_at) if system.created_at is not None else None,
+        "updated_at": str(system.updated_at) if system.updated_at is not None else None,
     }
 
 

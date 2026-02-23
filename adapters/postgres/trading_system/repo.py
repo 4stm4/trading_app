@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 try:
@@ -28,6 +28,20 @@ class TradingSystemPostgresRepository:
         stmt = select(TradingSystemTable).where(
             TradingSystemTable.owner_user_id == int(owner_user_id),
             TradingSystemTable.name == _normalize_name(name),
+        )
+        row = self._session.scalars(stmt).first()
+        if row is None:
+            return None
+        return to_entity(row)
+
+    def get_current(self, *, owner_user_id: int) -> TradingSystem | None:
+        stmt = (
+            select(TradingSystemTable)
+            .where(
+                TradingSystemTable.owner_user_id == int(owner_user_id),
+                TradingSystemTable.is_current.is_(True),
+            )
+            .order_by(TradingSystemTable.updated_at.desc(), TradingSystemTable.id.desc())
         )
         row = self._session.scalars(stmt).first()
         if row is None:
@@ -68,6 +82,26 @@ class TradingSystemPostgresRepository:
             self._session.add(row)
         else:
             to_table(system, target=row)
+        self._session.flush()
+        return to_entity(row)
+
+    def set_current(self, *, owner_user_id: int, system_id: int) -> TradingSystem | None:
+        row = self._session.get(TradingSystemTable, int(system_id))
+        if row is None:
+            return None
+        if int(row.owner_user_id) != int(owner_user_id):
+            return None
+
+        unset_stmt = (
+            update(TradingSystemTable)
+            .where(
+                TradingSystemTable.owner_user_id == int(owner_user_id),
+                TradingSystemTable.is_current.is_(True),
+            )
+            .values(is_current=False)
+        )
+        self._session.execute(unset_stmt)
+        row.is_current = True
         self._session.flush()
         return to_entity(row)
 

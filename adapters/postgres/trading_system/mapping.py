@@ -22,6 +22,7 @@ def to_entity(table_row: TradingSystemTable) -> TradingSystem:
         timeframe=table_row.timeframe,
         model_name=table_row.model_name,
         is_active=table_row.is_active,
+        is_current=table_row.is_current,
         created_at=table_row.created_at,
         updated_at=table_row.updated_at,
     )
@@ -41,6 +42,7 @@ def to_table(system: TradingSystem, target: TradingSystemTable | None = None) ->
     table_row.timeframe = _normalize_timeframe(system.timeframe)
     table_row.model_name = _normalize_model_name(system.model_name)
     table_row.is_active = bool(system.is_active)
+    table_row.is_current = bool(system.is_current)
     return table_row
 
 
