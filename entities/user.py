@@ -1,11 +1,14 @@
-from flask_login import UserMixin
-from flask_sqlalchemy import SQLAlchemy
+from __future__ import annotations
 
-db = SQLAlchemy()
+from dataclasses import dataclass
+from datetime import datetime
 
 
-class User(UserMixin, db.Model):
-    __tablename__ = "users"
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
+@dataclass
+class User:
+    email: str
+    password_hash: str
+    is_active: bool = True
+    id: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

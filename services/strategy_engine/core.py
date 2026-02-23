@@ -32,7 +32,7 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr
 
 
-def calculate_structure(df: pd.DataFrame, lookback: int = 20) -> Dict:
+def calculate_structure(df: pd.DataFrame, lookback: int = 20, mode: str = 'strict') -> Dict:
     """
     Определение структуры рынка: HH/HL (восходящий тренд) или LH/LL (нисходящий тренд)
 
@@ -43,6 +43,51 @@ def calculate_structure(df: pd.DataFrame, lookback: int = 20) -> Dict:
     Returns:
         Словарь с информацией о структуре
     """
+    if mode not in {'strict', 'simple'}:
+        mode = 'strict'
+
+    if mode == 'simple':
+        ma50 = df['ma50'].iloc[-1] if 'ma50' in df.columns and not pd.isna(df['ma50'].iloc[-1]) else None
+        ma200 = (
+            df['ma200'].iloc[-1] if 'ma200' in df.columns and not pd.isna(df['ma200'].iloc[-1]) else None
+        )
+        current_price = df['close'].iloc[-1]
+
+        if ma50 is None or ma200 is None:
+            return {
+                'structure': 'unknown',
+                'phase': 'unknown',
+                'trend_strength': 0,
+                'breakout': False,
+                'last_swing_high': None,
+                'last_swing_low': None,
+                'swing_highs_count': 0,
+                'swing_lows_count': 0,
+            }
+
+        if ma50 > ma200:
+            structure = 'uptrend'
+            phase = 'pullback' if current_price < ma50 else 'trend'
+        elif ma50 < ma200:
+            structure = 'downtrend'
+            phase = 'pullback' if current_price > ma50 else 'trend'
+        else:
+            structure = 'range'
+            phase = 'range'
+
+        trend_strength = abs(((ma50 - ma200) / ma200) * 100) if ma200 else 0
+
+        return {
+            'structure': structure,
+            'phase': phase,
+            'trend_strength': trend_strength,
+            'breakout': False,
+            'last_swing_high': None,
+            'last_swing_low': None,
+            'swing_highs_count': 0,
+            'swing_lows_count': 0,
+        }
+
     if len(df) < lookback * 2:
         return {
             'structure': 'unknown',
@@ -86,6 +131,15 @@ def calculate_structure(df: pd.DataFrame, lookback: int = 20) -> Dict:
     current_price = df['close'].iloc[-1]
     ma50 = df['ma50'].iloc[-1] if 'ma50' in df.columns and not pd.isna(df['ma50'].iloc[-1]) else None
     ma200 = df['ma200'].iloc[-1] if 'ma200' in df.columns and not pd.isna(df['ma200'].iloc[-1]) else None
+
+    # Fallback для strict-режима:
+    # если свинг-логика дала range, но MA50/MA200 явно расходятся,
+    # классифицируем как тренд, чтобы не терять направленные рынки.
+    if structure == 'range' and ma50 is not None and ma200 is not None and ma200 != 0:
+        ma_spread_pct = abs(((ma50 - ma200) / ma200) * 100)
+        if ma_spread_pct >= 0.8:
+            structure = 'uptrend' if ma50 > ma200 else 'downtrend'
+            trend_strength = max(abs(trend_strength), ma_spread_pct)
 
     phase = 'unknown'
     if ma50 is not None and ma200 is not None:
@@ -145,7 +199,12 @@ def calculate_distance_to_ma(price: float, ma_value: Optional[float]) -> float:
     return ((price - ma_value) / ma_value) * 100
 
 
-def calculate_volume_stats(df: pd.DataFrame, period: int = 20) -> Dict:
+def calculate_volume_stats(
+    df: pd.DataFrame,
+    period: int = 20,
+    mode: str = 'fixed',
+    percentile: float = 70.0
+) -> Dict:
     """
     Анализ объемов
 
@@ -156,24 +215,40 @@ def calculate_volume_stats(df: pd.DataFrame, period: int = 20) -> Dict:
     Returns:
         Словарь со статистикой объемов
     """
+    if mode not in {'fixed', 'adaptive'}:
+        mode = 'fixed'
+
     if 'volume' not in df.columns or len(df) < period:
         return {
             'avg_volume': 0,
             'current_volume': 0,
             'volume_ratio': 0,
-            'is_impulse': False
+            'is_impulse': False,
+            'threshold_volume': 0,
+            'threshold_ratio': 0,
+            'mode': mode
         }
 
-    avg_volume = df['volume'].tail(period).mean()
+    volumes = df['volume'].tail(period)
+    avg_volume = volumes.mean()
     current_volume = df['volume'].iloc[-1]
     volume_ratio = current_volume / avg_volume if avg_volume > 0 else 0
 
-    # Импульсная свеча - объем > 1.5x среднего
-    is_impulse = volume_ratio > 1.5
+    if mode == 'adaptive':
+        threshold_volume = float(np.percentile(volumes, percentile))
+        threshold_ratio = threshold_volume / avg_volume if avg_volume > 0 else 0
+    else:
+        threshold_ratio = 1.5
+        threshold_volume = avg_volume * threshold_ratio
+
+    is_impulse = current_volume >= threshold_volume if threshold_volume > 0 else False
 
     return {
         'avg_volume': avg_volume,
         'current_volume': current_volume,
         'volume_ratio': volume_ratio,
-        'is_impulse': is_impulse
+        'is_impulse': is_impulse,
+        'threshold_volume': threshold_volume,
+        'threshold_ratio': threshold_ratio,
+        'mode': mode
     }
