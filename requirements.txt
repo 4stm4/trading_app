@@ -1,22 +1,17 @@
-# Core runtime dependencies
-binance-connector
-colorama
-dash
-dash-bootstrap-components
-fastapi
-Flask
-loguru
-pandas
-pydantic
-pydantic-settings
-pyjobkit
-PyYAML
-requests
-uvicorn
-websockets
-
-# Database driver for the mssql+pymssql URL in settings.APP_DB_URL
-pymssql
-
-# Tooling
-ruff
+# Direct dependencies used by backend/test code
+alembic==1.13.1
+binance-connector==3.6.0
+colorama==0.4.6
+fastapi==0.110.0
+loguru==0.7.3
+numpy==1.26.4
+pandas==2.2.1
+psycopg[binary]==3.3.2
+pydantic==2.6.3
+pydantic-settings==2.2.1
+pyjobkit==0.2.0
+PyYAML==6.0.3
+requests==2.31.0
+SQLAlchemy==2.0.29
+uvicorn==0.28.1
+websockets==12.0

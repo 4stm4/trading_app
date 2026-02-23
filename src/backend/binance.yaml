@@ -1,0 +1,83 @@
+filters:
+
+  volume:
+    enabled: true
+    mode: adaptive
+    min_ratio: 0.95
+    high_vol_ratio: 1.20
+
+  trend:
+    enabled: true
+    min_strength_pct: 1.0
+    require_ma_alignment: true
+    allow_range: true
+
+  pullback:
+    enabled: true
+    max_ma50_distance_pct: 4.0
+    require_pullback: false
+
+  rsi:
+    enabled: true
+    overbought: 75
+    oversold: 25
+    trend_confirmation_only: false
+
+  atr:
+    enabled: true
+    stop_multiplier: 1.0
+    min_percentile: 0
+
+  risk:
+    risk_per_trade_pct: 1.0
+    min_stop_distance_pct: 0.5
+    max_position_notional_pct: 95.0
+    position_step: 0.0001
+    futures_margin_safety_factor: 1.2
+    max_daily_loss_pct: 2.0
+    equity_dd_stop_pct: 12.0
+
+    partial_take_profit: false
+    partial_tp_rr: 1.0
+    partial_close_fraction: 0.5
+    trail_after_partial: false
+    trailing_atr_multiplier: 1.0
+
+  rr:
+    min_rr: 2.5
+
+  regime:
+    enabled: true
+    trade_trend: true
+    trade_range: true
+    trade_high_vol: true
+    min_regime_pf: 1.0
+    high_vol_pf_threshold: 1.0
+    trend_pf_threshold: 1.0
+    range_pf_threshold: 1.0
+
+  costs:
+    enabled: true
+    futures_per_contract_rub: 2.02
+    futures_fee_mode: round_trip
+    securities_bps: 10.0
+    settlement_bps: 0.0
+    slippage_bps: 1.0
+
+  scoring:
+    conservative_v2_enabled: false
+    conservative_min_score: 0.55
+    max_threshold_relaxation: 0.30
+    atr_relaxation_bonus: 0.10
+    trend_relaxation_bonus: 0.05
+    range_relaxation_bonus: 0.05
+    min_expected_trades_per_month: 20.0
+
+    weights:
+      trend_alignment: 0.20
+      trend_strength: 0.15
+      pullback: 0.25
+      volume: 0.25
+      rsi: 0.15
+      ma_distance: 0.0
+      structure: 0.0
