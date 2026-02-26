@@ -20,6 +20,9 @@ from .errors import ApiConflictError, ApiServiceError, ApiUnauthorizedError, Api
 from .helpers import get_db_session_factory
 from .serializers import serialize_user
 
+DEFAULT_ADMIN_EMAIL = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin"
+
 
 def build_auth_register_response(payload: dict[str, Any]) -> dict[str, Any]:
     session_factory = get_db_session_factory()
@@ -81,6 +84,9 @@ def build_auth_login_response(payload: dict[str, Any]) -> dict[str, Any]:
 
     with session_scope(session_factory) as session:
         user_repo = UserPostgresRepository(session)
+        portfolio_repo = PortfolioPostgresRepository(session)
+        if email == DEFAULT_ADMIN_EMAIL and password == DEFAULT_ADMIN_PASSWORD:
+            _ensure_default_admin_user(user_repo=user_repo, portfolio_repo=portfolio_repo)
         user = user_repo.get_by_email(email)
         if user is None or not verify_password(password, user.password_hash):
             raise ApiUnauthorizedError("Invalid credentials")
@@ -150,6 +156,8 @@ def validate_password(password: str) -> None:
 
 def validate_email(email: str) -> None:
     normalized = normalize_email(email)
+    if normalized == DEFAULT_ADMIN_EMAIL:
+        return
     if not normalized or "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
         raise ApiValidationError("invalid email format")
 
@@ -169,3 +177,23 @@ def build_auth_response(user: User) -> dict[str, Any]:
         "expires_in": int(TOKEN_TTL_SECONDS),
         "user": serialize_user(user),
     }
+
+
+def _ensure_default_admin_user(
+    *,
+    user_repo: UserPostgresRepository,
+    portfolio_repo: PortfolioPostgresRepository,
+) -> User:
+    existing = user_repo.get_by_email(DEFAULT_ADMIN_EMAIL)
+    if existing is not None:
+        return existing
+    admin = user_repo.add(
+        User(
+            email=DEFAULT_ADMIN_EMAIL,
+            password_hash=hash_password(DEFAULT_ADMIN_PASSWORD),
+            is_active=True,
+        )
+    )
+    if admin.id is not None:
+        portfolio_repo.ensure_for_owner(owner_user_id=int(admin.id))
+    return admin

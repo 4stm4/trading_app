@@ -11,6 +11,7 @@ from .helpers import (
     coerce_float,
     coerce_int,
     get_model_or_raise,
+    is_dataset_stale,
     json_safe,
     load_dataset,
     parse_request_params,
@@ -82,6 +83,17 @@ def build_dashboard_market_response(payload: dict[str, Any]) -> dict[str, Any]:
 
     signal_payload = signal.to_dict()
     trade_plan = validate_trade_plan(signal_payload)
+    if is_dataset_stale(local, timeframe=params["timeframe"]):
+        stale_ts = str(local.index[-1]) if not local.empty else "unknown"
+        stale_issue = f"stale_market_data:{params['timeframe']}:{stale_ts}"
+        issues = trade_plan.setdefault("issues", [])
+        if stale_issue not in issues:
+            issues.append(stale_issue)
+        trade_plan["status"] = "invalid"
+        trade_plan["tradable"] = False
+        warnings = signal_payload.get("warnings")
+        if isinstance(warnings, list):
+            warnings.append(f"Market data is stale for timeframe {params['timeframe']} (last candle {stale_ts})")
 
     return json_safe(
         {

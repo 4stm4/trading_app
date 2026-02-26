@@ -124,6 +124,10 @@ body {
   grid-template-columns: 1fr;
 }
 
+.layout-full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .instruments {
   border-radius: 18px;
   background: #ffffff;
@@ -470,6 +474,58 @@ body {
   gap: 8px;
 }
 
+.authModalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(22, 33, 47, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.authModal {
+  width: min(520px, 100%);
+  border: 1px solid #c9d8eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 56px rgba(15, 28, 43, 0.3);
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.authModalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.authModalHeader h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #2a3f5a;
+}
+
+.authModalClose {
+  border: 1px solid #c9d8eb;
+  border-radius: 999px;
+  width: 30px;
+  height: 30px;
+  background: #ffffff;
+  color: #4b5f75;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.authModalClose:hover {
+  background: #f3f8ff;
+}
+
 .guestFlow h3 {
   margin: 0 0 10px;
   font-size: 18px;
@@ -615,6 +671,108 @@ body {
   margin-top: 12px;
   display: grid;
   gap: 14px;
+}
+
+.portfolioScreen {
+  margin-top: 16px;
+  gap: 16px;
+}
+
+.portfolioSummaryPanel {
+  border-color: #cfdff3;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(67, 119, 201, 0.08), transparent 42%),
+    linear-gradient(165deg, #ffffff 0%, #f6f9ff 100%);
+}
+
+.portfolioCandidatesPanel {
+  border-color: #cfdff3;
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 0% 100%, rgba(93, 137, 206, 0.08), transparent 40%),
+    #fcfeff;
+}
+
+.portfolioHistoryPanel {
+  border-color: #cfdff3;
+  border-radius: 14px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.portfolioScreen .portfolioControlRow {
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  align-items: center;
+}
+
+.portfolioScreen .portfolioControlInput {
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 10px;
+}
+
+.portfolioScreen .portfolioHint {
+  font-size: 14px;
+  line-height: 1.45;
+  max-width: 56ch;
+}
+
+.portfolioScreen .funnelGrid {
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.portfolioScreen .metricCard {
+  border-radius: 14px;
+  min-height: 92px;
+  padding: 12px 14px;
+}
+
+.portfolioScreen .candidatePanelHeader h3 {
+  font-size: 22px;
+  color: #27384f;
+}
+
+.portfolioScreen .candidateMeta {
+  margin-top: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.portfolioScreen .candidateColumnsWide {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.portfolioScreen .candidateColumn h4 {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.portfolioScreen .candidateItem {
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.portfolioScreen .candidateTop {
+  font-size: 13px;
+}
+
+.portfolioScreen .candidateBottom {
+  font-size: 12px;
+}
+
+.portfolioScreen .candidateEmpty {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.portfolioScreen .tradesTable th,
+.portfolioScreen .tradesTable td {
+  padding: 10px 12px;
+  font-size: 13px;
 }
 
 .screenStatus {
@@ -1053,6 +1211,11 @@ body {
   }
 
   .portfolioControlRow {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .portfolioScreen .portfolioControlRow {
     grid-template-columns: 1fr;
     align-items: start;
   }

@@ -21,7 +21,7 @@ docker compose up -d --build
 - `DB_PORT=5432`
 - `DB_NAME=trading`
 - `DB_USER=alex`
-- `DB_PASSWORD=<your_password>`
+- `DB_PASSWORD` (задайте в локальном окружении и не коммитьте)
 
 Backend использует эти параметры для `DATABASE_URL` и `ALEMBIC_DATABASE_URL`.
 
@@ -84,7 +84,7 @@ services:
     environment:
       POSTGRES_DB: trading_app
       POSTGRES_USER: trading
-      POSTGRES_PASSWORD: trading
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -96,8 +96,8 @@ services:
       DB_HOST: postgres
       DB_PORT: "5432"
       PORT: "5000"
-      DATABASE_URL: postgresql+psycopg://trading:trading@postgres:5432/trading_app
-      ALEMBIC_DATABASE_URL: postgresql+psycopg://trading:trading@postgres:5432/trading_app
+      DATABASE_URL: postgresql+psycopg://trading:${DB_PASSWORD}@postgres:5432/trading_app
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://trading:${DB_PASSWORD}@postgres:5432/trading_app
     ports:
       - "5001:5000"
 

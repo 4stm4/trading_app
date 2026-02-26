@@ -27,6 +27,8 @@ from .market import (
 from .systems import (
     build_portfolio_response,
     build_portfolio_update_response,
+    build_scans_create_response,
+    build_scans_response,
     build_system_create_response,
     build_system_run_artifacts_response,
     build_system_runs_response,
@@ -53,6 +55,8 @@ __all__ = [
     "build_system_set_current_response",
     "build_portfolio_response",
     "build_portfolio_update_response",
+    "build_scans_response",
+    "build_scans_create_response",
     "build_system_runs_response",
     "build_system_run_artifacts_response",
     "build_moex_instruments_response",

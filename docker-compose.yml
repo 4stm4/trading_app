@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-trading_app}
       POSTGRES_USER: ${POSTGRES_USER:-trading}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trading}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -33,11 +33,11 @@ services:
       DB_PORT: "${DB_PORT:-5432}"
       DB_NAME: ${DB_NAME:-trading_app}
       DB_USER: ${DB_USER:-trading}
-      DB_PASSWORD: ${DB_PASSWORD:-trading}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
       DB_WAIT_TIMEOUT: "90"
       PORT: "5000"
-      DATABASE_URL: postgresql+psycopg://${DB_USER:-trading}:${DB_PASSWORD:-trading}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-trading_app}
-      ALEMBIC_DATABASE_URL: postgresql+psycopg://${DB_USER:-trading}:${DB_PASSWORD:-trading}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-trading_app}
+      DATABASE_URL: postgresql+psycopg://${DB_USER:-trading}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-trading_app}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${DB_USER:-trading}:${DB_PASSWORD:?DB_PASSWORD is required}@${DB_HOST:-postgres}:${DB_PORT:-5432}/${DB_NAME:-trading_app}
     ports:
       - "${BACKEND_PORT:-5001}:5000"
     healthcheck:

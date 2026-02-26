@@ -18,14 +18,11 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from ports.api import create_app
+from services.api_service.database_url import resolve_database_url_from_env
 
 
 def _resolve_database_url() -> str | None:
-    return (
-        str(os.getenv("DATABASE_URL") or "").strip()
-        or str(os.getenv("ALEMBIC_DATABASE_URL") or "").strip()
-        or None
-    )
+    return resolve_database_url_from_env()
 
 
 def _mask_db_url(url: str) -> str:

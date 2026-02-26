@@ -5,6 +5,7 @@ from .portfolio import Portfolio
 from .recommended_sale import RecommendedSale
 from .trading_model import TradingModel
 from .trading_system import TradingSystem
+from .trading_system_scan import TradingSystemScan
 from .trading_system_run import TradingSystemRun
 from .trading_system_run_artifact import TradingSystemRunArtifact
 from .trading_system_signal import TradingSystemSignal
@@ -21,6 +22,7 @@ __all__ = (
     TradingModel,
     TradingSystem,
     TradingSystemVersion,
+    TradingSystemScan,
     TradingSystemRun,
     TradingSystemRunArtifact,
     TradingSystemSignal,

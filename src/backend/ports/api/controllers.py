@@ -26,6 +26,8 @@ from services.api_service import (
     build_optimize_response,
     build_portfolio_response,
     build_portfolio_update_response,
+    build_scans_create_response,
+    build_scans_response,
     build_signal_response,
     build_system_run_artifacts_response,
     build_system_runs_response,
@@ -198,6 +200,54 @@ def update_portfolio(payload: dict[str, Any] | None = Body(default=None), author
         return _service_error(error)
     except Exception as error:  # pragma: no cover - defensive fallback
         logger.exception("Error updating portfolio")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.get("/api/scans")
+def scans(
+    user_email: str | None = Query(default=None, max_length=255),
+    system_id: int | None = Query(default=None, ge=1),
+    scan_key: str | None = Query(default=None, max_length=128),
+    signal: str | None = Query(default=None, max_length=32),
+    tradable_only: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=2000),
+    authorization: str | None = Header(default=None),
+):
+    try:
+        payload: dict[str, Any] = {
+            "limit": limit,
+            "tradable_only": tradable_only,
+        }
+        if user_email:
+            payload["user_email"] = user_email
+        if system_id is not None:
+            payload["system_id"] = system_id
+        if scan_key:
+            payload["scan_key"] = scan_key
+        if signal:
+            payload["signal"] = signal
+        return build_scans_response(_with_auth_email(payload, authorization))
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error loading scans")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal error", "message": str(error)},
+        )
+
+
+@router.post("/api/scans")
+def create_scans(payload: dict[str, Any] | None = Body(default=None), authorization: str | None = Header(default=None)):
+    try:
+        return build_scans_create_response(_with_auth_email(payload or {}, authorization))
+    except ApiServiceError as error:
+        return _service_error(error)
+    except Exception as error:  # pragma: no cover - defensive fallback
+        logger.exception("Error storing scans")
         return JSONResponse(
             status_code=500,
             content={"error": "Internal error", "message": str(error)},

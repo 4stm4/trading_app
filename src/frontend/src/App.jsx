@@ -52,6 +52,8 @@ const TESTING_TAB_OPTIONS = [
   { key: 'robustness', label: 'Robustness' },
 ];
 const MODEL_OPTIONS = ['balanced', 'aggressive', 'scalp', 'high_rr', 'conservative'];
+const SCANNER_TIMEFRAMES = Object.freeze([...TIMEFRAME_OPTIONS]);
+const SCANNER_MODELS = Object.freeze([...MODEL_OPTIONS]);
 const AUTH_TOKEN_STORAGE_KEY = 'trading.authToken';
 const USER_EMAIL_STORAGE_KEY = 'trading.activeUserEmail';
 const USER_EMAILS_STORAGE_KEY = 'trading.userEmails';
@@ -227,6 +229,36 @@ function buildPortfolioUrl(userEmail) {
   return `${API_BASE_URL}/api/portfolio?${params.toString()}`;
 }
 
+function buildScansUrl(userEmail, options = {}) {
+  const normalizedEmail = String(userEmail ?? '').trim();
+  const params = new URLSearchParams();
+  if (normalizedEmail) {
+    params.set('user_email', normalizedEmail);
+  }
+  const systemId = Number(options.systemId);
+  if (Number.isInteger(systemId) && systemId > 0) {
+    params.set('system_id', String(systemId));
+  }
+  const scanKey = String(options.scanKey ?? '').trim();
+  if (scanKey) {
+    params.set('scan_key', scanKey);
+  }
+  const limit = Number(options.limit);
+  if (Number.isInteger(limit) && limit > 0) {
+    params.set('limit', String(limit));
+  }
+  const tradableOnly = options.tradableOnly === true;
+  if (tradableOnly) {
+    params.set('tradable_only', 'true');
+  }
+  const query = params.toString();
+  return query ? `${API_BASE_URL}/api/scans?${query}` : `${API_BASE_URL}/api/scans`;
+}
+
+function buildCreateScansUrl() {
+  return `${API_BASE_URL}/api/scans`;
+}
+
 function buildAuthHeaders(authToken, headers = {}) {
   const nextHeaders = { ...headers };
   const token = String(authToken ?? '').trim();
@@ -297,6 +329,24 @@ function formatNumber(value, digits = 2) {
     return '—';
   }
   return value.toFixed(digits);
+}
+
+function formatDateTime(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) {
+    return '—';
+  }
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return normalized;
+  }
+  return parsed.toLocaleString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function isFiniteNumber(value) {
@@ -1134,10 +1184,9 @@ function MetricCard({ label, value, tone = 'neutral' }) {
 }
 
 function PortfolioSignalsScreen({
-  selectedInstrument,
-  instrumentsCount,
-  timeframe,
-  model,
+  currentSystemName,
+  scanTimeframes,
+  scanModels,
   candidateLimit,
   portfolioAmount,
   onPortfolioAmountChange,
@@ -1146,23 +1195,17 @@ function PortfolioSignalsScreen({
   portfolioError,
   candidateScan,
   onScanCandidates,
-  onSelectCandidate,
-  marketData,
-  isLoadingMarket,
-  marketError,
+  scanHistory,
+  isLoadingScanHistory,
+  scanHistoryError,
 }) {
-  const signal = marketData?.signal ?? {};
-  const structure = marketData?.structure ?? {};
-  const indicatorSummary = marketData?.indicatorSummary ?? {};
-  const tradePlan = marketData?.tradePlan ?? {};
-  const signalClass = String(signal.signal ?? 'none').toLowerCase();
-  const signalTone = signalClass === 'long' ? 'positive' : signalClass === 'short' ? 'negative' : 'neutral';
-  const planTradable = Boolean(tradePlan.tradable);
-  const planStatusClass = planTradable ? 'long' : tradePlan.status === 'no_signal' ? 'none' : 'short';
+  const scanUniverseLabel = `all TF (${scanTimeframes.length}) x all models (${scanModels.length})`;
+  const sessions = Array.isArray(scanHistory?.sessions) ? scanHistory.sessions : [];
+  const scans = Array.isArray(scanHistory?.scans) ? scanHistory.scans : [];
 
   return (
-    <div className="screenStack">
-      <section className="funnelPanel">
+    <div className="screenStack portfolioScreen">
+      <section className="funnelPanel portfolioSummaryPanel">
         <h3>Portfolio Controls</h3>
         <div className="portfolioControlRow">
           <label className="portfolioControl">
@@ -1185,45 +1228,16 @@ function PortfolioSignalsScreen({
         {portfolioError ? <div className="instrumentStatus error">{portfolioError}</div> : null}
         <div className="funnelGrid">
           <MetricCard label="Portfolio Amount" value={formatPrice(Number(portfolioAmount))} />
-          <MetricCard label="Watchlist" value={String(instrumentsCount)} />
-          <MetricCard label="Selected Ticker" value={selectedInstrument?.symbol ?? '—'} />
-          <MetricCard label="Last Price" value={selectedInstrument?.price ?? '—'} />
+          <MetricCard label="System" value={String(currentSystemName || '—')} />
+          <MetricCard label="Scan Universe" value={scanUniverseLabel} />
+          <MetricCard label="Scan Top" value={String(candidateLimit)} />
           <MetricCard label="LONG Candidates" value={String(candidateScan.long.length)} tone="positive" />
           <MetricCard label="SHORT Candidates" value={String(candidateScan.short.length)} tone="negative" />
           <MetricCard label="Last Scan" value={candidateScan.lastUpdated || '—'} />
         </div>
       </section>
 
-      {isLoadingMarket && !marketData ? <div className="screenStatus">Обновление сигнала...</div> : null}
-      {marketError && !marketData ? <div className="screenStatus error">{marketError}</div> : null}
-
-      {marketData ? (
-        <section className="funnelPanel">
-          <h3>Selected Signal</h3>
-          <div className="tagRow">
-            <span className={`signalTag ${signalClass}`}>{String(signal.signal ?? 'none').toUpperCase()}</span>
-            <span className={`signalTag ${planStatusClass}`}>{planTradable ? 'TRADABLE' : 'NOT TRADABLE'}</span>
-            <span className="signalTag">TF: {timeframe}</span>
-            <span className="signalTag">Model: {model}</span>
-            <span className="signalTag">Confidence: {String(signal.confidence ?? 'none')}</span>
-            <span className="signalTag">Regime: {String(signal.market_regime ?? 'unknown')}</span>
-            <span className="signalTag">Phase: {String(signal.phase ?? 'unknown')}</span>
-            <span className="signalTag">Structure: {String(structure.structure ?? 'unknown')}</span>
-          </div>
-          <div className="metricsGrid">
-            <MetricCard label="Entry" value={formatPrice(Number(signal.entry))} tone={signalTone} />
-            <MetricCard label="Stop" value={formatPrice(Number(signal.stop))} tone="negative" />
-            <MetricCard label="Target" value={formatPrice(Number(signal.target))} tone="positive" />
-            <MetricCard label="RR" value={formatNumber(Number(signal.rr), 2)} />
-            <MetricCard label="Trend Strength" value={formatPercent(Number(structure.trend_strength))} />
-            <MetricCard label="RSI" value={formatNumber(Number(indicatorSummary.rsi), 2)} />
-            <MetricCard label="ATR" value={formatNumber(Number(indicatorSummary.atr), 4)} />
-            <MetricCard label="Volume Ratio" value={formatNumber(Number(indicatorSummary.volume_ratio), 2)} />
-          </div>
-        </section>
-      ) : null}
-
-      <section className="candidatePanel candidatePanelWide">
+      <section className="candidatePanel candidatePanelWide portfolioCandidatesPanel">
         <div className="candidatePanelHeader">
           <h3>Signal Candidates</h3>
           <button type="button" className="scanButton" onClick={onScanCandidates} disabled={candidateScan.isScanning}>
@@ -1231,7 +1245,8 @@ function PortfolioSignalsScreen({
           </button>
         </div>
         <p className="candidateMeta">
-          {timeframe} / {model} / top {candidateLimit} / deposit {formatPrice(Number(portfolioAmount))}
+          {scanUniverseLabel} / top {candidateLimit} / deposit {formatPrice(Number(portfolioAmount))}
+          {` / system ${String(currentSystemName || '—')}`}
           {candidateScan.lastUpdated ? ` / updated ${candidateScan.lastUpdated}` : ''}
         </p>
         {candidateScan.isScanning ? (
@@ -1246,20 +1261,17 @@ function PortfolioSignalsScreen({
             <ul className="candidateList">
               {candidateScan.long.length === 0 ? <li className="candidateEmpty">Нет LONG кандидатов</li> : null}
               {candidateScan.long.map((item) => (
-                <li key={`long-${item.symbol}`}>
-                  <button
-                    type="button"
-                    className={`candidateItem long ${selectedInstrument?.symbol === item.symbol ? 'active' : ''}`}
-                    onClick={() => onSelectCandidate(item)}
-                  >
+                <li key={`long-${item.scanKey}`}>
+                  <div className="candidateItem long">
                     <span className="candidateTop">
                       <strong>{item.symbol}</strong>
                       <span>{String(item.confidence).toUpperCase()}</span>
                     </span>
                     <span className="candidateBottom">
-                      RR {formatNumber(Number(item.rr), 2)} | {item.regime}
+                      {item.timeframe} / {item.model} / {String(currentSystemName || '—')} | RR{' '}
+                      {formatNumber(Number(item.rr), 2)} | {item.regime}
                     </span>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -1269,25 +1281,92 @@ function PortfolioSignalsScreen({
             <ul className="candidateList">
               {candidateScan.short.length === 0 ? <li className="candidateEmpty">Нет SHORT кандидатов</li> : null}
               {candidateScan.short.map((item) => (
-                <li key={`short-${item.symbol}`}>
-                  <button
-                    type="button"
-                    className={`candidateItem short ${selectedInstrument?.symbol === item.symbol ? 'active' : ''}`}
-                    onClick={() => onSelectCandidate(item)}
-                  >
+                <li key={`short-${item.scanKey}`}>
+                  <div className="candidateItem short">
                     <span className="candidateTop">
                       <strong>{item.symbol}</strong>
                       <span>{String(item.confidence).toUpperCase()}</span>
                     </span>
                     <span className="candidateBottom">
-                      RR {formatNumber(Number(item.rr), 2)} | {item.regime}
+                      {item.timeframe} / {item.model} / {String(currentSystemName || '—')} | RR{' '}
+                      {formatNumber(Number(item.rr), 2)} | {item.regime}
                     </span>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
           </div>
         </div>
+      </section>
+
+      <section className="funnelPanel portfolioHistoryPanel">
+        <h3>Scan History</h3>
+        {isLoadingScanHistory ? <div className="instrumentStatus">Загрузка истории сканирования...</div> : null}
+        {scanHistoryError ? <div className="instrumentStatus error">{scanHistoryError}</div> : null}
+        {!isLoadingScanHistory && !scanHistoryError && sessions.length === 0 ? (
+          <div className="instrumentStatus">История сканирования пуста</div>
+        ) : null}
+        {sessions.length > 0 ? (
+          <div className="tradesTableWrap">
+            <table className="tradesTable">
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>Система</th>
+                  <th>Модели</th>
+                  <th>Кандидаты</th>
+                  <th>Tradable</th>
+                  <th>Scan Key</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.slice(0, 20).map((item) => (
+                  <tr key={String(item.scan_key)}>
+                    <td>{formatDateTime(item.created_at)}</td>
+                    <td>{Array.isArray(item.systems) && item.systems.length > 0 ? item.systems.join(', ') : '—'}</td>
+                    <td>{Array.isArray(item.models) && item.models.length > 0 ? item.models.join(', ') : '—'}</td>
+                    <td>{String(item.count ?? 0)}</td>
+                    <td>{String(item.tradable_count ?? 0)}</td>
+                    <td>{String(item.scan_key ?? '')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {scans.length > 0 ? (
+          <div className="tradesTableWrap">
+            <table className="tradesTable">
+              <thead>
+                <tr>
+                  <th>Когда</th>
+                  <th>Тикер</th>
+                  <th>Signal</th>
+                  <th>TF</th>
+                  <th>Model</th>
+                  <th>System</th>
+                  <th>Entry</th>
+                  <th>RR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scans.slice(0, 80).map((item) => (
+                  <tr key={String(item.id ?? `${item.scan_key}-${item.symbol}-${item.timeframe}-${item.model_name}`)}>
+                    <td>{formatDateTime(item.created_at)}</td>
+                    <td>{String(item.symbol ?? '—')}</td>
+                    <td>{String(item.signal ?? 'none').toUpperCase()}</td>
+                    <td>{String(item.timeframe ?? '—')}</td>
+                    <td>{String(item.model_name ?? item.model ?? '—')}</td>
+                    <td>{String(item.system_name ?? '—')}</td>
+                    <td>{formatPrice(Number(item.entry))}</td>
+                    <td>{formatNumber(Number(item.rr), 2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
       </section>
     </div>
   );
@@ -1805,16 +1884,7 @@ function SystemSettingsScreen({
   );
 }
 
-function GuestMarketingScreen({
-  email,
-  password,
-  onEmailChange,
-  onPasswordChange,
-  onLogin,
-  onRegister,
-  isAuthPending,
-  authError,
-}) {
+function GuestMarketingScreen() {
   const features = [
     {
       title: 'Portfolio & Signals',
@@ -1860,9 +1930,64 @@ function GuestMarketingScreen({
         ))}
       </section>
 
-      <section className="guestAuthPanel">
-        <h3>Регистрация и вход</h3>
+      <section className="guestFlow">
+        <h3>Как начать</h3>
+        <div className="guestFlowGrid">
+          <div className="guestStep">
+            <strong>1</strong>
+            <p>Нажмите кнопку "Вход", затем зарегистрируйтесь или войдите в модальном окне.</p>
+          </div>
+          <div className="guestStep">
+            <strong>2</strong>
+            <p>Создайте свою систему и сделайте ее текущей.</p>
+          </div>
+          <div className="guestStep">
+            <strong>3</strong>
+            <p>Укажите размер портфеля и запустите сканирование.</p>
+          </div>
+          <div className="guestStep">
+            <strong>4</strong>
+            <p>Проверьте стратегию в Backtest и Robustness.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AuthModal({
+  isOpen,
+  email,
+  password,
+  onEmailChange,
+  onPasswordChange,
+  onLogin,
+  onRegister,
+  onClose,
+  isAuthPending,
+  authError,
+}) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <div className="authModalOverlay" role="presentation" onClick={onClose}>
+      <section
+        className="authModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="authModalHeader">
+          <h3 id="auth-modal-title">Регистрация и вход</h3>
+          <button type="button" className="authModalClose" onClick={onClose} aria-label="Закрыть окно авторизации">
+            ×
+          </button>
+        </header>
         <p>Создайте аккаунт или войдите, чтобы сохранять системы и результаты тестов в вашем профиле.</p>
+        <p>Демо-пользователь: <strong>admin / admin</strong>.</p>
         <div className="guestAuthForm">
           <label className="settingField">
             <span>Email</span>
@@ -1892,28 +2017,6 @@ function GuestMarketingScreen({
           </div>
         </div>
         {authError ? <div className="screenStatus error">{authError}</div> : null}
-      </section>
-
-      <section className="guestFlow">
-        <h3>Как начать</h3>
-        <div className="guestFlowGrid">
-          <div className="guestStep">
-            <strong>1</strong>
-            <p>Введите email и пароль, затем Register или Login.</p>
-          </div>
-          <div className="guestStep">
-            <strong>2</strong>
-            <p>Создайте свою систему и сделайте ее текущей.</p>
-          </div>
-          <div className="guestStep">
-            <strong>3</strong>
-            <p>Укажите размер портфеля и запустите сканирование.</p>
-          </div>
-          <div className="guestStep">
-            <strong>4</strong>
-            <p>Проверьте стратегию в Backtest и Robustness.</p>
-          </div>
-        </div>
       </section>
     </div>
   );
@@ -1947,6 +2050,7 @@ export default function App() {
   const [selectedMarketKey, setSelectedMarketKey] = useState(MARKET_OPTIONS[0].key);
   const [selectedTimeframe, setSelectedTimeframe] = useState('1h');
   const [selectedScreen, setSelectedScreen] = useState('portfolio');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [selectedTestingTab, setSelectedTestingTab] = useState('backtest');
   const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
   const [savedSystems, setSavedSystems] = useState([]);
@@ -1996,6 +2100,9 @@ export default function App() {
     lastUpdated: '',
     key: '',
   });
+  const [scanHistory, setScanHistory] = useState({ scans: [], sessions: [] });
+  const [isLoadingScanHistory, setIsLoadingScanHistory] = useState(false);
+  const [scanHistoryError, setScanHistoryError] = useState('');
   const scanRequestRef = useRef(0);
   const isAuthenticated = Boolean(activeUserEmail);
 
@@ -2004,12 +2111,11 @@ export default function App() {
     () => savedSystems.find((system) => system.id === currentSystemId) ?? null,
     [savedSystems, currentSystemId],
   );
+  const currentSystemName = String(currentSystem?.name ?? '').trim();
   const scannerConfig = useMemo(
     () => normalizeSystemConfig(currentSystem?.config),
     [currentSystem?.config],
   );
-  const scannerModel = String(currentSystem?.model ?? DEFAULT_MODEL).trim() || DEFAULT_MODEL;
-  const scannerTimeframe = String(currentSystem?.timeframe ?? '1h').trim() || '1h';
   const systemConfigKey = useMemo(
     () =>
       [
@@ -2034,8 +2140,6 @@ export default function App() {
       [
         selectedMarket.key,
         currentSystemId || 'none',
-        scannerTimeframe,
-        scannerModel,
         portfolioState.balance,
         scannerConfig.candidateScanLimit,
         scannerConfig.candidateScanConcurrency,
@@ -2044,7 +2148,7 @@ export default function App() {
         scannerConfig.commissionBps,
         scannerConfig.slippageBps,
       ].join('|'),
-    [selectedMarket.key, currentSystemId, scannerTimeframe, scannerModel, scannerConfig, portfolioState.balance],
+    [selectedMarket.key, currentSystemId, scannerConfig, portfolioState.balance],
   );
   const dataKey = useMemo(() => {
     const symbol = selectedInstrument?.symbol ?? '';
@@ -2146,7 +2250,11 @@ export default function App() {
       setAuthError('Укажите email.');
       return;
     }
-    if (password.length < 8) {
+    if (!password) {
+      setAuthError('Укажите пароль.');
+      return;
+    }
+    if (mode === 'register' && password.length < 8) {
       setAuthError('Пароль должен быть не короче 8 символов.');
       return;
     }
@@ -2178,6 +2286,7 @@ export default function App() {
       setAuthPassword('');
       setSelectedScreen('portfolio');
       setKnownUserEmails((previous) => Array.from(new Set([...previous, email])));
+      setIsAuthModalOpen(false);
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       setAuthError(`Ошибка авторизации: ${reason}`);
@@ -2227,6 +2336,93 @@ export default function App() {
     const payload = await response.json();
     applyPortfolioPayload(payload);
     return payload;
+  }
+
+  async function fetchScans(signal, options = {}) {
+    if (!isAuthenticated) {
+      setScanHistory({ scans: [], sessions: [] });
+      setScanHistoryError('');
+      return { scans: [], sessions: [] };
+    }
+    const targetSystemId = Number(options.systemId ?? currentSystemId);
+    setIsLoadingScanHistory(true);
+    setScanHistoryError('');
+    try {
+      const response = await fetch(
+        buildScansUrl(activeUserEmail, {
+          systemId: Number.isInteger(targetSystemId) && targetSystemId > 0 ? targetSystemId : undefined,
+          limit: 800,
+        }),
+        {
+          signal,
+          cache: 'no-store',
+          headers: buildAuthHeaders(authToken),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(await parseResponseError(response));
+      }
+      const payload = await response.json();
+      setScanHistory({
+        scans: Array.isArray(payload?.scans) ? payload.scans : [],
+        sessions: Array.isArray(payload?.sessions) ? payload.sessions : [],
+      });
+      return payload;
+    } catch (error) {
+      if (signal?.aborted) {
+        return { scans: [], sessions: [] };
+      }
+      const reason = error instanceof Error ? error.message : 'unknown error';
+      setScanHistory({ scans: [], sessions: [] });
+      setScanHistoryError(`Не удалось загрузить сканы: ${reason}`);
+      return { scans: [], sessions: [] };
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoadingScanHistory(false);
+      }
+    }
+  }
+
+  async function persistScans({ scanKey, systemId, items }) {
+    const resolvedSystemId = Number(systemId);
+    if (!isAuthenticated || !Number.isInteger(resolvedSystemId) || resolvedSystemId <= 0) {
+      return false;
+    }
+    const scans = Array.isArray(items) ? items : [];
+    if (scans.length === 0) {
+      return true;
+    }
+    try {
+      const response = await fetch(buildCreateScansUrl(), {
+        method: 'POST',
+        headers: buildAuthHeaders(authToken, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          user_email: activeUserEmail,
+          system_id: resolvedSystemId,
+          scan_key: scanKey,
+          scans: scans.map((item) => ({
+            exchange: 'moex',
+            engine: selectedMarket.engine,
+            market: selectedMarket.market,
+            board: selectedMarket.board,
+            symbol: String(item.symbol ?? ''),
+            timeframe: String(item.timeframe ?? ''),
+            model_name: String(item.model ?? ''),
+            signal: String(item.signal ?? 'none'),
+            confidence: String(item.confidence ?? 'none'),
+            tradable: true,
+            entry: Number(item.entry),
+            rr: Number(item.rr),
+            market_regime: String(item.regime ?? 'unknown'),
+            phase: String(item.phase ?? 'unknown'),
+            issues: [],
+          })),
+        }),
+      });
+      return response.ok;
+    } catch (_error) {
+      return false;
+    }
   }
 
   async function persistPortfolioBalance(nextBalance) {
@@ -2395,6 +2591,8 @@ export default function App() {
         setIsLoadingPortfolio(false);
         setSystemsError('');
         setPortfolioError('');
+        setScanHistory({ scans: [], sessions: [] });
+        setScanHistoryError('');
         return;
       }
       setSystemsError("");
@@ -2402,9 +2600,13 @@ export default function App() {
       setPortfolioError('');
       let systemsLoaded = false;
       try {
-        await fetchSystems("", abortController.signal);
+        const systemsPayload = await fetchSystems("", abortController.signal);
         systemsLoaded = true;
         await fetchPortfolio(abortController.signal);
+        const payloadSystemId = Number(systemsPayload?.current_system_id);
+        await fetchScans(abortController.signal, {
+          systemId: Number.isInteger(payloadSystemId) && payloadSystemId > 0 ? payloadSystemId : undefined,
+        });
       } catch (error) {
         if (abortController.signal.aborted) {
           return;
@@ -2684,13 +2886,23 @@ export default function App() {
 
     const requestId = scanRequestRef.current + 1;
     scanRequestRef.current = requestId;
+    const scanBatchKey = `scan-${Date.now()}-${currentSystemId}`;
     const pool = instruments.slice(0, Math.max(1, Math.floor(scannerConfig.candidateScanLimit)));
+    const scanTargets = pool.flatMap((instrument) =>
+      SCANNER_TIMEFRAMES.flatMap((targetTimeframe) =>
+        SCANNER_MODELS.map((targetModel) => ({
+          instrument,
+          timeframe: targetTimeframe,
+          model: targetModel,
+        })),
+      ),
+    );
 
     setCandidateScan({
       isScanning: true,
       error: '',
       scanned: 0,
-      total: pool.length,
+      total: scanTargets.length,
       long: [],
       short: [],
       lastUpdated: '',
@@ -2698,18 +2910,19 @@ export default function App() {
     });
 
     const rows = await mapWithConcurrency(
-      pool,
+      scanTargets,
       Math.max(1, Math.floor(scannerConfig.candidateScanConcurrency)),
-      async (instrument) => {
+      async (target) => {
+        const instrument = target.instrument;
         const response = await fetch(
           buildDashboardMarketUrl({
             ticker: instrument.symbol,
             exchange: 'moex',
-            timeframe: scannerTimeframe,
+            timeframe: target.timeframe,
             engine: selectedMarket.engine,
             market: selectedMarket.market,
             board: selectedMarket.board,
-            model: scannerModel,
+            model: target.model,
             deposit: portfolioState.balance,
             limit: scannerConfig.marketLimit,
             commissionBps: scannerConfig.commissionBps,
@@ -2730,14 +2943,12 @@ export default function App() {
         if (!tradePlan || tradePlan.tradable !== true) {
           return null;
         }
-        const snapshot = parseMarketResponse(payload);
-        if (!snapshot) {
-          return null;
-        }
         const confidence = String(payload?.signal?.confidence ?? 'none').toLowerCase();
         return {
           symbol: instrument.symbol,
           name: instrument.name,
+          timeframe: target.timeframe,
+          model: target.model,
           signal,
           confidence,
           confidenceRank: CONFIDENCE_RANK[confidence] ?? 0,
@@ -2745,7 +2956,7 @@ export default function App() {
           entry: Number(payload?.signal?.entry),
           regime: String(payload?.signal?.market_regime ?? 'unknown'),
           phase: String(payload?.signal?.phase ?? 'unknown'),
-          snapshot,
+          scanKey: `${instrument.symbol}:${target.timeframe}:${target.model}:${signal}`,
         };
       },
       (completed, total) => {
@@ -2777,27 +2988,27 @@ export default function App() {
     setCandidateScan({
       isScanning: false,
       error: '',
-      scanned: pool.length,
-      total: pool.length,
+      scanned: scanTargets.length,
+      total: scanTargets.length,
       long: candidates.filter((item) => item.signal === 'long'),
       short: candidates.filter((item) => item.signal === 'short'),
       lastUpdated: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
       key: candidateScopeKey,
     });
-  }
 
-  function handleSelectCandidate(candidate) {
-    if (!candidate) {
+    const persisted = await persistScans({
+      scanKey: scanBatchKey,
+      systemId: Number(currentSystemId),
+      items: candidates,
+    });
+    if (!persisted) {
+      setCandidateScan((previous) => ({
+        ...previous,
+        error: 'Скан завершен, но не удалось сохранить результаты в историю',
+      }));
       return;
     }
-    const instrument = instruments.find((value) => value.symbol === candidate.symbol);
-    if (instrument) {
-      setSelectedInstrument(instrument);
-    }
-    if (candidate.snapshot) {
-      setMarketData(candidate.snapshot);
-      setMarketError('');
-    }
+    await fetchScans(undefined, { systemId: Number(currentSystemId) });
   }
 
   function handleSystemConfigChange(key, rawValue) {
@@ -2906,6 +3117,7 @@ export default function App() {
       const payload = await response.json();
       const createdId = String(payload?.system?.id ?? '').trim();
       await fetchSystems(createdId);
+      await fetchScans(undefined, { systemId: Number(createdId) });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       setSystemsError(`Не удалось создать систему: ${reason}`);
@@ -2953,6 +3165,7 @@ export default function App() {
         throw new Error(await parseResponseError(setCurrentResponse));
       }
       await fetchSystems(String(systemId));
+      await fetchScans(undefined, { systemId });
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown error';
       setSystemsError(`Не удалось сделать систему текущей: ${reason}`);
@@ -2980,6 +3193,17 @@ export default function App() {
     setSelectedScreen('portfolio');
   }
 
+  function openAuthModal() {
+    setAuthError('');
+    setIsAuthModalOpen(true);
+  }
+
+  function closeAuthModal() {
+    if (!isAuthPending) {
+      setIsAuthModalOpen(false);
+    }
+  }
+
   function handlePortfolioAmountChange(rawValue) {
     handleSystemConfigChange("deposit", rawValue);
   }
@@ -3004,6 +3228,30 @@ export default function App() {
   }
 
   const isSystemScreen = isAuthenticated && selectedScreen === 'system';
+  const isPortfolioScreen = isAuthenticated && selectedScreen === 'portfolio';
+  const showInstrumentsPanel = !isSystemScreen && !isPortfolioScreen;
+  const layoutClassName = [
+    'layout',
+    isSystemScreen ? 'layout-system' : '',
+    !showInstrumentsPanel ? 'layout-full' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  useEffect(() => {
+    if (!isAuthModalOpen) {
+      return undefined;
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        closeAuthModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isAuthModalOpen, isAuthPending]);
 
   return (
     <main className="page">
@@ -3036,27 +3284,20 @@ export default function App() {
           ) : (
             <>
               <span className="topMenuUserLabel">Guest</span>
-              <span className="topMenuUserCurrent">Требуется вход</span>
+              <button type="button" className="scanButton" onClick={openAuthModal}>
+                Вход
+              </button>
             </>
           )}
         </div>
       </nav>
       {!isAuthenticated ? (
         <section className="panel guestPanel">
-          <GuestMarketingScreen
-            email={userEmailDraft}
-            password={authPassword}
-            onEmailChange={setUserEmailDraft}
-            onPasswordChange={setAuthPassword}
-            onLogin={handleLogin}
-            onRegister={handleRegister}
-            isAuthPending={isAuthPending}
-            authError={authError}
-          />
+          <GuestMarketingScreen />
         </section>
       ) : (
-        <section className={`layout ${isSystemScreen ? 'layout-system' : ''}`}>
-        {!isSystemScreen ? (
+        <section className={layoutClassName}>
+        {showInstrumentsPanel ? (
           <aside className="instruments">
             <h2>Instruments</h2>
             <div className="instrumentToolbar">
@@ -3112,6 +3353,11 @@ export default function App() {
                 <h2>System Settings</h2>
                 <p>Конфигурация движка сигналов и тестирования</p>
               </>
+            ) : isPortfolioScreen ? (
+              <>
+                <h2>Portfolio & Scan</h2>
+                <p>Сканирование для пользователя {activeUserEmail} / система {currentSystemName || '—'}</p>
+              </>
             ) : (
               <div className="panelHeaderRow">
                 <div className="panelIdentity">
@@ -3146,10 +3392,9 @@ export default function App() {
 
           {selectedScreen === 'portfolio' ? (
             <PortfolioSignalsScreen
-              selectedInstrument={selectedInstrument}
-              instrumentsCount={instruments.length}
-              timeframe={scannerTimeframe}
-              model={scannerModel}
+              currentSystemName={currentSystemName}
+              scanTimeframes={SCANNER_TIMEFRAMES}
+              scanModels={SCANNER_MODELS}
               candidateLimit={scannerConfig.candidateScanLimit}
               portfolioAmount={portfolioState.balance}
               onPortfolioAmountChange={handlePortfolioAmountChange}
@@ -3158,10 +3403,9 @@ export default function App() {
               portfolioError={portfolioError}
               candidateScan={candidateScan}
               onScanCandidates={handleScanCandidates}
-              onSelectCandidate={handleSelectCandidate}
-              marketData={marketData}
-              isLoadingMarket={isLoadingMarket}
-              marketError={marketError}
+              scanHistory={scanHistory}
+              isLoadingScanHistory={isLoadingScanHistory}
+              scanHistoryError={scanHistoryError}
             />
           ) : null}
           {selectedScreen === 'analysis' ? (
@@ -3206,6 +3450,20 @@ export default function App() {
         </section>
       </section>
       )}
+      {!isAuthenticated ? (
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          email={userEmailDraft}
+          password={authPassword}
+          onEmailChange={setUserEmailDraft}
+          onPasswordChange={setAuthPassword}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onClose={closeAuthModal}
+          isAuthPending={isAuthPending}
+          authError={authError}
+        />
+      ) : null}
     </main>
   );
 }

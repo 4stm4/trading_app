@@ -9,6 +9,7 @@ from .db import (
     create_trading_model_schema,
     create_trading_system_run_schema,
     create_trading_system_run_artifact_schema,
+    create_trading_system_scan_schema,
     create_trading_system_schema,
     create_trading_system_signal_schema,
     create_trading_system_version_schema,
@@ -26,6 +27,7 @@ from .trading_system_run_artifact import (
     TradingSystemRunArtifactPostgresRepository,
     TradingSystemRunArtifactTable,
 )
+from .trading_system_scan import TradingSystemScanPostgresRepository, TradingSystemScanTable
 from .trading_system_signal import TradingSystemSignalPostgresRepository, TradingSystemSignalTable
 from .trading_system_version import TradingSystemVersionPostgresRepository, TradingSystemVersionTable
 from .user import UserPostgresRepository, UserTable
@@ -43,6 +45,7 @@ __all__ = [
     "create_trading_system_version_schema",
     "create_trading_system_run_schema",
     "create_trading_system_run_artifact_schema",
+    "create_trading_system_scan_schema",
     "create_trading_system_signal_schema",
     "create_user_schema",
     "session_scope",
@@ -66,6 +69,8 @@ __all__ = [
     "TradingSystemRunTable",
     "TradingSystemRunArtifactPostgresRepository",
     "TradingSystemRunArtifactTable",
+    "TradingSystemScanPostgresRepository",
+    "TradingSystemScanTable",
     "TradingSystemSignalPostgresRepository",
     "TradingSystemSignalTable",
     "UserPostgresRepository",

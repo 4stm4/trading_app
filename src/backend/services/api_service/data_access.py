@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 import logging
 import os
 from typing import Any
@@ -20,6 +21,7 @@ from services.strategy_engine.public import calculate_atr, get_model
 from services.strategy_engine.indicators import add_indicators
 
 from .conversions import to_unix_timestamp
+from .database_url import resolve_database_url_from_env
 from .errors import ApiValidationError
 
 logger = logging.getLogger(__name__)
@@ -44,6 +46,7 @@ def load_dataset(
     end_date: str | None = None,
 ):
     adapter = build_adapter(params)
+    timeframe = str(params.get("timeframe") or "").strip()
 
     db_df = load_dataset_from_db(
         params,
@@ -52,19 +55,35 @@ def load_dataset(
         end_date=end_date,
     )
     if not db_df.empty:
-        logger.info(
-            "Dataset source=db ticker=%s tf=%s rows=%d",
-            params["ticker"],
-            params["timeframe"],
-            len(db_df),
-        )
-        return db_df, adapter
+        if start_date is None and end_date is None and is_dataset_stale(db_df, timeframe=timeframe):
+            last_ts = _resolve_last_timestamp(db_df)
+            logger.warning(
+                "Dataset source=db stale ticker=%s tf=%s rows=%d last_ts=%s -> fallback to exchange",
+                params["ticker"],
+                timeframe,
+                len(db_df),
+                last_ts.isoformat() if last_ts is not None else "unknown",
+            )
+        else:
+            logger.info(
+                "Dataset source=db ticker=%s tf=%s rows=%d",
+                params["ticker"],
+                timeframe,
+                len(db_df),
+            )
+            return db_df, adapter
 
-    logger.info(
-        "Dataset source=exchange ticker=%s tf=%s (db empty)",
-        params["ticker"],
-        params["timeframe"],
-    )
+        logger.info(
+            "Dataset source=exchange ticker=%s tf=%s (db stale)",
+            params["ticker"],
+            timeframe,
+        )
+    else:
+        logger.info(
+            "Dataset source=exchange ticker=%s tf=%s (db empty)",
+            params["ticker"],
+            timeframe,
+        )
     try:
         df, _ = load_data_with_indicators_for_exchange(
             exchange=params["exchange"],
@@ -116,14 +135,75 @@ def load_dataset_from_db(
     return add_indicators(frame, ma_periods=[50, 200], rsi_period=14)
 
 
+def is_dataset_stale(
+    frame: pd.DataFrame,
+    *,
+    timeframe: str,
+    now: datetime | None = None,
+) -> bool:
+    if frame.empty:
+        return True
+    last_ts = _resolve_last_timestamp(frame)
+    if last_ts is None:
+        return True
+    reference = now or datetime.utcnow()
+    return reference - last_ts > _max_dataset_age(timeframe)
+
+
+def _is_dataset_stale(
+    frame: pd.DataFrame,
+    *,
+    timeframe: str,
+    now: datetime | None = None,
+) -> bool:
+    return is_dataset_stale(frame, timeframe=timeframe, now=now)
+
+
+def _resolve_last_timestamp(frame: pd.DataFrame) -> datetime | None:
+    if frame.empty:
+        return None
+    try:
+        candidate = frame.index.max()
+    except Exception:  # noqa: BLE001
+        return None
+    parsed = pd.to_datetime(candidate, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    timestamp = pd.Timestamp(parsed).to_pydatetime()
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.astimezone(tz=None).replace(tzinfo=None)
+    return timestamp
+
+
+def _max_dataset_age(timeframe: str) -> timedelta:
+    normalized = str(timeframe or "").strip()
+    if not normalized:
+        return timedelta(days=7)
+
+    unit = normalized[-1]
+    value_raw = normalized[:-1] or "1"
+    try:
+        value = max(1, int(value_raw))
+    except ValueError:
+        return timedelta(days=7)
+
+    if unit in {"m", "h"}:
+        return timedelta(days=3)
+    if unit == "d":
+        return timedelta(days=max(14, value * 14))
+    if unit == "w":
+        return timedelta(days=max(60, value * 60))
+    if unit == "M":
+        return timedelta(days=max(400, value * 400))
+    return timedelta(days=7)
+
+
 def get_db_session_factory() -> sessionmaker[Session] | None:
     global _DB_SESSION_FACTORY, _DB_SESSION_FACTORY_INIT, _DB_SESSION_FACTORY_URL
 
-    database_url = (
-        str(os.getenv("DATABASE_URL") or "").strip()
-        or str(os.getenv("ALEMBIC_DATABASE_URL") or "").strip()
-        or str(os.getenv("AUTH_DB_URL") or "").strip()
-    )
+    database_url = resolve_database_url_from_env()
+    if database_url:
+        os.environ.setdefault("DATABASE_URL", database_url)
     if _DB_SESSION_FACTORY_INIT and database_url == (_DB_SESSION_FACTORY_URL or ""):
         return _DB_SESSION_FACTORY
 

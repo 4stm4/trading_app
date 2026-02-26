@@ -8,6 +8,7 @@ from .systems_management import (
 )
 from .systems_portfolio import build_portfolio_response, build_portfolio_update_response
 from .systems_runs import build_system_run_artifacts_response, build_system_runs_response
+from .systems_scans import build_scans_create_response, build_scans_response
 
 __all__ = [
     "build_systems_response",
@@ -18,4 +19,6 @@ __all__ = [
     "build_portfolio_update_response",
     "build_system_runs_response",
     "build_system_run_artifacts_response",
+    "build_scans_response",
+    "build_scans_create_response",
 ]

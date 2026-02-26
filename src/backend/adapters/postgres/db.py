@@ -48,6 +48,7 @@ def create_schema(engine: Engine) -> None:
     create_trading_system_run_schema(engine)
     create_trading_system_run_artifact_schema(engine)
     create_trading_system_signal_schema(engine)
+    create_trading_system_scan_schema(engine)
 
 
 def create_instrument_schema(engine: Engine) -> None:
@@ -114,3 +115,9 @@ def create_trading_system_signal_schema(engine: Engine) -> None:
     from .trading_system_signal.tables import TradingSystemSignalTable
 
     Base.metadata.create_all(bind=engine, tables=[TradingSystemSignalTable.__table__])
+
+
+def create_trading_system_scan_schema(engine: Engine) -> None:
+    from .trading_system_scan.tables import TradingSystemScanTable
+
+    Base.metadata.create_all(bind=engine, tables=[TradingSystemScanTable.__table__])

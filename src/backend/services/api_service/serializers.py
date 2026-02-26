@@ -138,3 +138,37 @@ def serialize_run_artifact(artifact: Any) -> dict[str, Any]:
         "payload_json": to_json_object(getattr(artifact, "payload_json", None)),
         "created_at": str(getattr(artifact, "created_at", "") or ""),
     }
+
+
+def serialize_system_scan(scan: Any, *, system_name: str | None = None) -> dict[str, Any]:
+    model_name = str(getattr(scan, "model_name", "") or "").strip()
+    return {
+        "id": int(scan.id) if getattr(scan, "id", None) is not None else None,
+        "owner_user_id": int(scan.owner_user_id),
+        "system_id": int(scan.system_id),
+        "system_version_id": int(scan.system_version_id) if getattr(scan, "system_version_id", None) is not None else None,
+        "system_name": str(system_name or "").strip() or None,
+        "scan_key": str(getattr(scan, "scan_key", "") or ""),
+        "exchange": str(getattr(scan, "exchange", "") or ""),
+        "engine": str(getattr(scan, "engine", "") or ""),
+        "market": str(getattr(scan, "market", "") or ""),
+        "board": str(getattr(scan, "board", "") or ""),
+        "symbol": str(getattr(scan, "symbol", "") or ""),
+        "timeframe": str(getattr(scan, "timeframe", "") or ""),
+        "model_name": model_name,
+        "model": model_name,
+        "signal": str(getattr(scan, "signal", "") or ""),
+        "confidence": str(getattr(scan, "confidence", "") or ""),
+        "tradable": bool(getattr(scan, "tradable", False)),
+        "entry": to_float_or_none(getattr(scan, "entry", None)),
+        "stop": to_float_or_none(getattr(scan, "stop", None)),
+        "target": to_float_or_none(getattr(scan, "target", None)),
+        "rr": to_float_or_none(getattr(scan, "rr", None)),
+        "market_regime": str(getattr(scan, "market_regime", "") or ""),
+        "phase": str(getattr(scan, "phase", "") or ""),
+        "issues_json": to_json_object(getattr(scan, "issues_json", None))
+        if getattr(scan, "issues_json", None) is not None
+        else None,
+        "generated_at": str(getattr(scan, "generated_at", "") or ""),
+        "created_at": str(getattr(scan, "created_at", "") or ""),
+    }
